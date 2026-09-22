@@ -4,15 +4,63 @@
 <div class="page-head">
   <div>
     <h1>اليوم</h1>
-    <p class="lead">{{ workspace.name }} · وضع التشغيل: {{ "تجريبي" if workspace.operating_mode == "demo" else "فعلي" }}</p>
+    <p class="lead">{{ workspace.name }} · المنطقة الزمنية <bdi dir="ltr">{{ workspace.timezone }}</bdi></p>
   </div>
 </div>
 
 {% if not worker_alive %}
-<p class="notice notice-warn" role="status">العامل (worker) لا يرسل نبضات حاليًا{% if heartbeat %}؛ آخر نبضة {{ heartbeat.last_seen_at | dt }}{% endif %}. فحوص المصادر تبقى في الطابور حتى يعمل. شغّله بـ <bdi dir="ltr">uv run python -m app.jobs.worker</bdi>.</p>
+<p class="notice notice-warn" role="status">العامل (worker) لا يرسل نبضات حاليًا{% if heartbeat %}؛ آخر نبضة {{ heartbeat.last_seen_at | dt }}{% endif %}. المهام (الاكتشاف والإرسال والمزامنة) تبقى في الطابور حتى يعمل. شغّله بـ <bdi dir="ltr">uv run python -m app.jobs.worker</bdi>.</p>
 {% endif %}
 
+{% if readiness.blockers and ops.operating_mode == "live" %}
+<div class="notice notice-bad" role="alert"><p>التشغيل الفعلي ينقصه:</p><ul>{% for b in readiness.blockers %}<li>{{ b }}</li>{% endfor %}</ul></div>
+{% endif %}
+{% if unknown_delivery %}<p class="notice notice-bad" role="alert"><a href="/approvals">{{ unknown_delivery }} رسالة بتسليم غير معروف تحتاج مصالحتك</a>؛ لا يعاد إرسالها تلقائيًا.</p>{% endif %}
+{% if needs_linking %}<p class="notice notice-warn"><a href="/conversations">{{ needs_linking }} رسالة واردة تحتاج ربطًا يدويًا</a>.</p>{% endif %}
+
 <div class="grid">
+  <section class="card">
+    <h2>بانتظار اعتمادك</h2>
+    <div class="stat">{{ pending_approvals }}</div>
+    <div class="stat-label"><a href="/approvals">مسودات للمراجعة</a></div>
+  </section>
+  <section class="card">
+    <h2>حصة اليوم</h2>
+    <div class="stat">{{ quota_used }} / {{ ops.max_qualified_per_day }}</div>
+    <div class="stat-label">فرص مؤهلة عولجت اليوم · اكتُشف {{ discovered_today }} مرشحًا</div>
+  </section>
+  <section class="card">
+    <h2>الإنفاق</h2>
+    <div class="stat">{{ "%.2f" | format(usage.day_spent) }} <small>{{ ops.currency }}</small></div>
+    <div class="stat-label">
+      اليوم{% if ops.daily_budget is not none %} من {{ ops.daily_budget }}{% else %} (لا ميزانية يومية محددة){% endif %}
+      · الشهر {{ "%.2f" | format(usage.month_spent) }}{% if ops.monthly_budget is not none %} من {{ ops.monthly_budget }}{% endif %}
+    </div>
+  </section>
+  <section class="card">
+    <h2>آخر دورة اكتشاف</h2>
+    {% if last_discovery %}
+    <p><span class="badge tone-{{ tone(last_discovery.status) }}">{{ label("run", last_discovery.status) }}</span> {{ last_discovery.started_at | dt }}</p>
+    {% if last_discovery.summary.get("reason") %}<p class="muted small">{{ last_discovery.summary.get("reason") }}</p>{% endif %}
+    <p class="small"><a href="/runs?run={{ last_discovery.id }}">التفاصيل</a></p>
+    {% else %}<p class="muted">لم تعمل بعد.</p>{% endif %}
+  </section>
+</div>
+
+<div class="grid">
+  <section class="card">
+    <h2>التحكم</h2>
+    <p class="muted small">وضع التشغيل: {{ "فعلي (مجدول)" if ops.operating_mode == "live" else "تجريبي (يدوي فقط)" }} · الإرسال الفعلي: {{ "مفعل" if outbound_enabled else "معطل" }}</p>
+    {% if principal.is_owner %}
+    <form method="post" action="/control" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <label class="check"><input type="checkbox" name="pause_discovery" {% if ops.pause_discovery %}checked{% endif %}> إيقاف الاكتشاف</label>
+      <label class="check"><input type="checkbox" name="pause_outbound" {% if ops.pause_outbound %}checked{% endif %}> إيقاف الإرسال</label>
+      <label class="check"><input type="checkbox" name="pause_all_processing" {% if ops.pause_all_processing %}checked{% endif %}> إيقاف كل المعالجة</label>
+      <div class="actions"><button class="btn btn-secondary" type="submit">حفظ</button> <a href="/runs">تشغيل يدوي</a></div>
+    </form>
+    {% endif %}
+  </section>
   <section class="card">
     <h2>جاهزية الإعداد</h2>
     <ul class="plain checklist">
@@ -20,20 +68,21 @@
       <li class="{{ 'done' if done else '' }}"><a href="{{ href }}">{{ text }}</a> — {{ "متوفر" if done else "مطلوب قبل دورة البحث" }}</li>
       {% endfor %}
     </ul>
+    {% if readiness.warnings %}<ul class="small muted">{% for w in readiness.warnings %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
   </section>
   <section class="card">
-    <h2>الشركات</h2>
-    <div class="stat">{{ companies_total }}</div>
-    <div class="stat-label">إجمالي الجهات المسجلة</div>
-    {% if companies_review %}<p><a href="/companies?status=needs_review">{{ companies_review }} تحتاج مراجعة تكرار محتمل</a></p>{% endif %}
-  </section>
-  <section class="card">
-    <h2>الطابور</h2>
-    <div class="stat">{{ jobs_pending }}</div>
-    <div class="stat-label">مهام معلقة أو قيد التنفيذ</div>
-    {% if jobs_failed %}<p><a href="/settings">{{ jobs_failed }} مهمة فشلت</a></p>{% endif %}
+    <h2>الشركات والطابور</h2>
+    <p>{{ companies_total }} جهة مسجلة{% if companies_review %} · <a href="/companies?status=needs_review">{{ companies_review }} تحتاج مراجعة</a>{% endif %}</p>
+    <p>{{ jobs_pending }} مهمة معلقة{% if jobs_failed %} · <a href="/runs">{{ jobs_failed }} فشلت</a>{% endif %}</p>
   </section>
 </div>
+
+{% if digest %}
+<section class="card">
+  <h2>آخر ملخص ({{ digest.local_date }})</h2>
+  <pre class="message-body">{{ digest.body_text }}</pre>
+</section>
+{% endif %}
 
 {% if problem_sources %}
 <section class="card">
@@ -45,9 +94,4 @@
   </ul>
 </section>
 {% endif %}
-
-<section class="card">
-  <h2>ما لم يُبنَ بعد في هذه النسخة</h2>
-  <p class="muted">الموافقات والحصص اليومية والميزانية وآخر دورة بحث والإيقاف تظهر هنا عند بنائها (المراحل M2–M5). لا تُعرض أرقام لها قبل وجود بيانات حقيقية.</p>
-</section>
 {% endblock %}

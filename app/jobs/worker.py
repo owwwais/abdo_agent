@@ -40,6 +40,7 @@ class Worker:
         self.sm: async_sessionmaker[AsyncSession] = ctx.sessionmaker
         self.worker_id = worker_id or f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
         self.stopping = asyncio.Event()
+        self._last_schedule = -1e9
 
     async def _beat(self, job_id: uuid.UUID | None = None, stopped: bool = False) -> None:
         now = datetime.now(UTC)
@@ -112,12 +113,40 @@ class Worker:
             count += 1
         return count
 
+    async def background_tick(self) -> None:
+        """المجدول مرة كل دقيقة، وسحب تحديثات تيليجرام (وضع polling) في كل دورة."""
+        from sqlalchemy import select
+
+        from app.db.models import Workspace
+        from app.jobs.scheduler import schedule_due
+        from app.services.telegram_bot import poll_updates
+        from app.workflows.common import Deps
+
+        now = asyncio.get_running_loop().time()
+        if now - self._last_schedule >= 60:
+            self._last_schedule = now
+            await schedule_due(self.sm, self.ctx.settings)
+        deps = Deps(
+            settings=self.ctx.settings,
+            sm=self.sm,
+            resolver=self.ctx.resolver,
+            transport=self.ctx.transport,
+        )
+        async with self.sm() as db:
+            ws_ids = list((await db.execute(select(Workspace.id))).scalars())
+        for ws_id in ws_ids:
+            await poll_updates(deps, ws_id)
+
     async def run_forever(self) -> None:
+        from app.workflows.checkpoint import setup_checkpointer
+
+        await setup_checkpointer(self.ctx.settings)
         await self._beat()
         log.info("worker %s started", self.worker_id)
         while not self.stopping.is_set():
             try:
                 await self.drain()
+                await self.background_tick()
                 await self._beat()
             except Exception:
                 log.exception("worker loop error")

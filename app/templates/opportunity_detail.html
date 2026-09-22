@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}{{ company.display_name }} · {{ product.name }}{% endblock %}
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">{% endmacro %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1><a href="/companies/{{ company.id }}">{{ company.display_name }}</a> · {{ product.name }}</h1>
+    <p class="lead">
+      <span class="badge tone-{{ tone(opp.status) }}">{{ label("opportunity", opp.status) }}</span>
+      · الدرجة {{ opp.score if opp.score is not none else "—" }}/100 (أولية {{ opp.preliminary_score }})
+      {% if segment %} · {{ segment.name }}{% endif %}{% if source %} · المصدر: {{ source.name }}{% endif %}
+    </p>
+  </div>
+  <div class="actions">
+    {% if principal.is_owner and opp.status in ("discovered", "qualified", "disqualified") %}
+    <form method="post" action="/opportunities/{{ opp.id }}/process">{{ csrf() }}<button class="btn" type="submit">معالجة الآن</button></form>
+    {% endif %}
+    <form method="post" action="/opportunities/{{ opp.id }}/status" class="actions">
+      {{ csrf() }}
+      <label class="sr-only" for="st">تغيير الحالة</label>
+      <select id="st" name="status">
+        <option value="won">ربح</option><option value="lost">خسارة</option><option value="not_interested">غير مهتمة</option>
+        <option value="archived">أرشفة</option><option value="discovered">إعادة للاكتشاف</option>
+      </select>
+      <button class="btn btn-secondary" type="submit">تغيير الحالة</button>
+    </form>
+  </div>
+</div>
+
+{% if opp.disqualify_reason %}<p class="notice notice-warn">{{ opp.disqualify_reason }}</p>{% endif %}
+
+<div class="grid">
+  <section class="card">
+    <h2>لماذا هذه الفرصة</h2>
+    <p>{{ opp.selection_reason or "—" }}</p>
+    {% if opp.score_breakdown %}
+    <dl class="kv">
+      {% for k, v in opp.score_breakdown.items() %}<dt>{{ k }}</dt><dd>{{ v.score if v is mapping else v }}{% if v is mapping and v.reason %} — {{ v.reason }}{% endif %}</dd>{% endfor %}
+    </dl>
+    {% endif %}
+  </section>
+  <section class="card">
+    <h2>حقائق موثقة</h2>
+    <ul class="plain">{% for f in opp.facts %}<li>{{ f.claim }}</li>{% else %}<li class="muted">لا حقائق بعد.</li>{% endfor %}</ul>
+    {% if opp.hypotheses %}<h3>فرضيات (غير مؤكدة)</h3><ul>{% for h in opp.hypotheses %}<li>{{ h if h is string else h.text }}</li>{% endfor %}</ul>{% endif %}
+    {% if opp.missing_info %}<h3>معلومات ناقصة</h3><ul>{% for m in opp.missing_info %}<li>{{ m }}</li>{% endfor %}</ul>{% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>الأدلة ({{ evidence | length }})</h2>
+  <div class="table-wrap">
+    <table class="responsive">
+      <thead><tr><th>الادعاء</th><th>النوع</th><th>المصدر</th><th>رُصد</th><th>ينتهي</th></tr></thead>
+      <tbody>
+      {% for e in evidence %}
+      <tr>
+        <td data-label="الادعاء">{{ e.claim }}{% if (e.id | string) in evidence_ids %} <span class="badge tone-info">مستخدم في التأهيل</span>{% endif %}</td>
+        <td data-label="النوع">{{ e.fact_type }}</td>
+        <td data-label="المصدر">{% if e.url %}<a href="{{ e.url }}" target="_blank" rel="noopener noreferrer"><bdi dir="ltr">{{ e.url | truncate(60) }}</bdi></a>{% else %}—{% endif %}</td>
+        <td data-label="رُصد">{{ e.observed_at | dt }}</td>
+        <td data-label="ينتهي">{{ e.expires_at | dt }}</td>
+      </tr>
+      {% else %}<tr><td colspan="5" class="muted">لا أدلة سارية.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>جهات الاتصال وأهلية التواصل</h2>
+  <ul class="plain">
+    {% for c, masked, elig in contacts %}
+    <li>
+      {{ label("channel", c.channel) }}: <bdi dir="ltr">{{ c.value }}</bdi>{% if c.professional_name %} · {{ c.professional_name }}{% endif %}
+      <span class="badge tone-{{ tone(elig) }}">{{ label("eligibility", elig) }}</span>
+      <details><summary class="small">تعديل الأهلية</summary>
+        <form method="post" action="/contacts/{{ c.id }}/eligibility" class="stack">
+          {{ csrf() }}<input type="hidden" name="back" value="/opportunities/{{ opp.id }}">
+          <div class="row">
+            <div class="field"><label for="e-{{ c.id }}">الحالة</label>
+              <select id="e-{{ c.id }}" name="status">{% for k in ("allowed", "unknown", "disallowed") %}<option value="{{ k }}" {% if k == elig %}selected{% endif %}>{{ label("eligibility", k) }}</option>{% endfor %}</select></div>
+            <div class="field"><label for="eb-{{ c.id }}">السند</label><input id="eb-{{ c.id }}" type="text" name="basis" maxlength="1000"></div>
+          </div>
+          <div class="actions"><button class="btn btn-secondary" type="submit">حفظ</button></div>
+        </form>
+      </details>
+    </li>
+    {% else %}<li class="muted">لا جهات اتصال.</li>{% endfor %}
+  </ul>
+</section>
+
+<section class="card">
+  <h2>المسودات</h2>
+  <ul class="plain">
+    {% for d in drafts %}
+    <li><span class="badge tone-{{ tone(d.status) }}">{{ label("draft", d.status) }}</span> {{ d.subject or "(بلا موضوع)" }} · الإصدار {{ d.revision }} · {{ d.created_at | dt }}
+      {% if d.status in ("pending_review", "deferred", "approved") %} · <a href="/approvals#draft-{{ d.id }}">فتح في الموافقات</a>{% endif %}</li>
+    {% else %}<li class="muted">لا مسودات.</li>{% endfor %}
+  </ul>
+  {% if approvals %}
+  <details><summary>سجل القرارات</summary>
+    <ul class="plain small">{% for a in approvals %}<li>{{ a.decided_at | dt }} · {{ a.decision }} · الإصدار {{ a.draft_revision }} · عبر {{ a.via }} · {{ a.status }}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>المحادثة</h2>
+  {% for m in messages %}
+  <div class="message {{ m.direction }}">
+    <p class="small muted">{{ label("direction", m.direction) }} · {{ label("channel", m.channel) }} · {{ m.sent_or_received_at | dt }}{% if m.classification %} · <span class="badge tone-{{ tone(m.classification) }}">{{ label("classification", m.classification) }}</span>{% endif %}</p>
+    {% if m.subject %}<p><strong>{{ m.subject }}</strong></p>{% endif %}
+    <pre class="message-body">{{ m.body_text }}</pre>
+  </div>
+  {% else %}<p class="muted">لا رسائل بعد.</p>{% endfor %}
+</section>
+
+<section class="card">
+  <h2>التشغيلات</h2>
+  <ul class="plain small">
+    {% for r in runs %}<li><a href="/runs?run={{ r.id }}">{{ label("run_kind", r.kind) }}</a> · <span class="badge tone-{{ tone(r.status) }}">{{ label("run", r.status) }}</span> · {{ r.started_at | dt }}</li>{% else %}<li class="muted">لا تشغيلات.</li>{% endfor %}
+  </ul>
+</section>
+{% endblock %}

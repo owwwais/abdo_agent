@@ -28,10 +28,13 @@ async def main() -> None:
         sm = make_sessionmaker(engine)
         async with sm() as db:
             reaped = await queue.reap_expired(db)
+        from app.jobs.scheduler import schedule_due
+
+        scheduled = await schedule_due(sm, get_settings())
         async with sm() as db:
             rows = (await db.execute(select(Job.status, func.count()).group_by(Job.status))).all()
         counts = {status: n for status, n in rows}
-        print(f"reaped={reaped} jobs={counts}")
+        print(f"reaped={reaped} scheduled={len(scheduled)} jobs={counts}")
     finally:
         await engine.dispose()
 

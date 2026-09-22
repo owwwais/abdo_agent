@@ -18,7 +18,7 @@
     <a class="brand" href="/">وكيل البحث والمبيعات</a>
     {% if principal %}
     <nav class="nav" aria-label="التنقل الرئيسي">
-      {% set items = [("/", "اليوم"), ("/products", "المنتجات"), ("/segments", "الفئات"), ("/sources", "المصادر"), ("/companies", "الشركات"), ("/imports", "الاستيراد"), ("/settings", "الإعدادات")] %}
+      {% set items = [("/", "اليوم"), ("/approvals", "الموافقات"), ("/opportunities", "الفرص"), ("/conversations", "المحادثات"), ("/products", "المنتجات"), ("/segments", "الفئات"), ("/sources", "المصادر"), ("/companies", "الشركات"), ("/imports", "الاستيراد"), ("/runs", "التشغيل"), ("/settings", "الإعدادات")] %}
       {% for href, text in items %}
         <a href="{{ href }}" {% if (href == "/" and request_path == "/") or (href != "/" and request_path.startswith(href)) %}aria-current="page"{% endif %}>{{ text }}</a>
       {% endfor %}

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}المحادثات{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>المحادثات</h1>
+    <p class="lead">الردود الواردة تُربط تلقائيًا بالمحادثة عبر معرفات الرسائل. ما لا يمكن ربطه بثقة ينتظر ربطك اليدوي هنا.</p>
+  </div>
+</div>
+
+<section class="card">
+  <h2>تحتاج ربطًا ({{ needs | length }})</h2>
+  {% for m in needs %}
+  <div class="message inbound">
+    <p class="small muted">من <bdi dir="ltr">{{ m.from_address or "—" }}</bdi> · {{ m.sent_or_received_at | dt }}{% if m.classification %} · <span class="badge tone-{{ tone(m.classification) }}">{{ label("classification", m.classification) }}</span>{% endif %}</p>
+    {% if m.subject %}<p><strong>{{ m.subject }}</strong></p>{% endif %}
+    <pre class="message-body">{{ m.body_text | truncate(1200) }}</pre>
+    {% set cands = candidates.get(m.id | string, []) %}
+    {% if cands %}
+    <form method="post" action="/messages/{{ m.id }}/link" class="actions">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <label for="o-{{ m.id }}">اربطها بالفرصة</label>
+      <select id="o-{{ m.id }}" name="opportunity_id">
+        {% for o, c, pr in cands %}<option value="{{ o.id }}">{{ c.display_name }} · {{ pr.name }} ({{ label("opportunity", o.status) }})</option>{% endfor %}
+      </select>
+      <button class="btn" type="submit">ربط</button>
+    </form>
+    {% else %}
+    <p class="hint">لا فرص مرشحة لهذا المرسل. إن كانت تخص جهة معروفة، أضف بريدها إلى جهات اتصال الشركة ثم أعد المزامنة.</p>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="muted">لا رسائل غامضة.</p>
+  {% endfor %}
+</section>
+
+<section class="card">
+  <h2>أحدث الرسائل</h2>
+  <div class="table-wrap">
+    <table class="responsive">
+      <thead><tr><th>الاتجاه</th><th>الجهة</th><th>الموضوع</th><th>التصنيف</th><th>الوقت</th></tr></thead>
+      <tbody>
+      {% for m, c in recent %}
+      <tr>
+        <td data-label="الاتجاه">{{ label("direction", m.direction) }} · {{ label("channel", m.channel) }}</td>
+        <td data-label="الجهة">{% if c %}<a href="/companies/{{ c.id }}">{{ c.display_name }}</a>{% else %}<bdi dir="ltr">{{ m.from_address or m.to_address or "—" }}</bdi>{% endif %}</td>
+        <td data-label="الموضوع">{{ m.subject or "—" }}</td>
+        <td data-label="التصنيف">{% if m.classification %}<span class="badge tone-{{ tone(m.classification) }}">{{ label("classification", m.classification) }}</span>{% else %}—{% endif %}{% if m.link_status == "needs_linking" %} <span class="badge tone-warn">تحتاج ربطًا</span>{% endif %}</td>
+        <td data-label="الوقت">{{ m.sent_or_received_at | dt }}</td>
+      </tr>
+      {% else %}<tr><td colspan="5" class="muted">لا رسائل بعد.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

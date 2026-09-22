@@ -163,6 +163,25 @@ async def fail(db: AsyncSession, lease: Lease, error: str, *, retryable: bool = 
     return job.status
 
 
+async def reschedule(db: AsyncSession, lease: Lease, run_after: datetime, note: str) -> None:
+    """يعيد المهمة للطابور في وقت لاحق دون احتسابها محاولة فاشلة (مثل حد الإرسال اليومي أو قفل مشغول)."""
+    res = await db.execute(
+        update(Job)
+        .where(_held(lease))
+        .values(
+            status="retry_scheduled",
+            run_after=run_after,
+            attempts=Job.attempts - 1,
+            lease_owner=None,
+            lease_until=None,
+            last_error=note[:500],
+            updated_at=_now(),
+        )
+    )
+    if res.rowcount != 1:  # type: ignore[attr-defined]
+        raise LeaseLost(str(lease.job_id))
+
+
 async def reap_expired(db: AsyncSession) -> int:
     """يسترد حجوزات منتهية: تعاد للجدولة ضمن حد المحاولات، وإلا تفشل. لا يمس الإرسال الملتبس
     (يُعالج في مسار مصالحة منفصل في M4)."""

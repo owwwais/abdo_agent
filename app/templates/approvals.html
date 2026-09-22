@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}الموافقات{% endblock %}
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">{% endmacro %}
+{% macro eligibility_form(contact_id, current) %}
+<form method="post" action="/contacts/{{ contact_id }}/eligibility" class="stack">
+  {{ csrf() }}
+  <input type="hidden" name="back" value="/approvals">
+  <div class="row">
+    <div class="field">
+      <label for="st-{{ contact_id }}">أهلية التواصل</label>
+      <select id="st-{{ contact_id }}" name="status">
+        {% for k in ("allowed", "unknown", "disallowed") %}<option value="{{ k }}" {% if k == current %}selected{% endif %}>{{ label("eligibility", k) }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="basis-{{ contact_id }}">السند (مطلوب عند السماح)</label>
+      <input id="basis-{{ contact_id }}" type="text" name="basis" maxlength="1000" placeholder="مثال: بريد عمل منشور للتواصل التجاري على موقع الشركة">
+    </div>
+  </div>
+  <div class="actions"><button class="btn btn-secondary" type="submit">حفظ الأهلية</button></div>
+</form>
+{% endmacro %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>الموافقات</h1>
+    <p class="lead">لا تخرج أي رسالة دون اعتمادك لهذا الإصدار بعينه. أي تعديل في النص أو المستلم يلغي الاعتماد السابق.</p>
+  </div>
+</div>
+
+{% if forced_fake %}
+<p class="notice notice-info" role="note">بيئة demo: الإرسال يذهب إلى صندوق اصطناعي، ولا يصل إلى أي جهة حقيقية.</p>
+{% elif not outbound_enabled %}
+<p class="notice notice-warn" role="note">الإرسال الفعلي معطل (<bdi dir="ltr">OUTBOUND_ENABLED=false</bdi>). تبقى الرسائل المعتمدة في الطابور حتى تفعّله بنفسك في ملف البيئة.</p>
+{% endif %}
+
+{% if unknown %}
+<section class="card">
+  <h2>تسليم غير معروف يحتاج مصالحة</h2>
+  <p class="hint">انقطع الاتصال أثناء الإرسال أو بعده، فلا نعرف هل وصلت الرسالة. لا يعيد النظام الإرسال تلقائيًا. راجع مجلد «المرسل» في بريدك ثم اختر.</p>
+  <ul class="plain">
+    {% for cmd, d in unknown %}
+    <li>
+      <strong>{{ d.subject }}</strong> → <bdi dir="ltr">{{ d.recipient_snapshot.get("value", "—") }}</bdi> · {{ cmd.updated_at | dt }}
+      <span class="muted small">{{ cmd.last_error or "" }}</span>
+      <div class="actions">
+        <form method="post" action="/outbound/{{ cmd.id }}/reconcile">{{ csrf() }}<input type="hidden" name="outcome" value="sent"><button class="btn btn-secondary" type="submit">وجدتها في المرسل: أُرسلت</button></form>
+        <form method="post" action="/outbound/{{ cmd.id }}/reconcile">{{ csrf() }}<input type="hidden" name="outcome" value="not_sent"><button class="btn btn-quiet" type="submit">لم تُرسل: أعدها للمراجعة</button></form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<h2>بانتظار قرارك ({{ pending | length }})</h2>
+{% for x in pending %}
+{% set d = x.draft %}
+<article class="card" id="draft-{{ d.id }}">
+  <div class="page-head">
+    <div>
+      <h3><a href="/opportunities/{{ x.opp.id }}">{{ x.company.display_name }}</a> · {{ x.product.name }}</h3>
+      <p class="muted small">
+        {{ "رد على رسالة" if d.kind == "reply" else "تواصل أول" }} · {{ label("channel", d.channel) }} · الإصدار {{ d.revision }} ·
+        الدرجة {{ x.opp.score if x.opp.score is not none else "—" }}/100 ·
+        <span class="badge tone-{{ tone(d.status) }}">{{ label("draft", d.status) }}</span>
+        {% if d.status == "deferred" and d.defer_until %} حتى {{ d.defer_until | dt }}{% endif %}
+      </p>
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>المستلم</dt>
+    <dd>
+      {% if d.recipient_snapshot %}<bdi dir="ltr">{{ d.recipient_snapshot.get("value") }}</bdi>{% if d.recipient_snapshot.get("name") %} · {{ d.recipient_snapshot.get("name") }}{% endif %}{% else %}<span class="badge tone-bad">لا مستلم</span>{% endif %}
+      · أهلية التواصل: <span class="badge tone-{{ tone(x.eligibility) }}">{{ label("eligibility", x.eligibility) }}</span>
+    </dd>
+    <dt>الموضوع</dt><dd>{{ d.subject or "—" }}</dd>
+  </dl>
+  <pre class="message-body">{{ d.body }}</pre>
+
+  {% if x.blocking %}
+  <div class="notice notice-bad" role="alert"><p>مخالفات تمنع الاعتماد:</p><ul>{% for f in x.blocking %}<li>{{ f.message }}</li>{% endfor %}</ul></div>
+  {% endif %}
+  {% if x.warnings %}
+  <div class="notice notice-warn"><ul>{% for f in x.warnings %}<li>{{ f.message }}</li>{% endfor %}</ul></div>
+  {% endif %}
+
+  <details>
+    <summary>الأدلة التي بُنيت عليها الرسالة ({{ x.facts | length }})</summary>
+    <ul class="plain">
+      {% for f, ev in x.facts %}
+      <li>{{ f.claim }}{% if ev and ev.url %} — <a href="{{ ev.url }}" rel="noopener noreferrer" target="_blank"><bdi dir="ltr">{{ ev.url }}</bdi></a>{% elif not ev %} <span class="badge tone-muted">الدليل انتهت صلاحيته</span>{% endif %}</li>
+      {% else %}<li class="muted">لا حقائق مسجلة.</li>{% endfor %}
+    </ul>
+    {% if x.opp.score_breakdown %}<p class="small muted">توزيع الدرجة: {% for k, v in x.opp.score_breakdown.items() %}{{ k }} {{ v.score if v is mapping else v }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+  </details>
+
+  {% if d.channel == "email" and d.recipient_contact_id and x.eligibility != "allowed" %}
+  <div class="notice notice-warn">
+    <p>لا يُعتمد بريد لمستلم أهليته غير مؤكدة. وثّق سند التواصل أولًا، أو غيّر المستلم.</p>
+    {{ eligibility_form(d.recipient_contact_id, x.eligibility) }}
+  </div>
+  {% endif %}
+
+  <details>
+    <summary>تعديل النص أو المستلم (ينشئ إصدارًا جديدًا)</summary>
+    <form method="post" action="/approvals/{{ d.id }}/edit" class="stack">
+      {{ csrf() }}
+      <input type="hidden" name="revision" value="{{ d.revision }}">
+      <div class="field">
+        <label for="c-{{ d.id }}">المستلم</label>
+        <select id="c-{{ d.id }}" name="contact_id">
+          {% for c, masked, elig in x.contacts %}
+          <option value="{{ c.id }}" {% if c.id == d.recipient_contact_id %}selected{% endif %}>{{ label("channel", c.channel) }}: {{ c.value }} ({{ label("eligibility", elig) }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field"><label for="s-{{ d.id }}">الموضوع</label><input id="s-{{ d.id }}" type="text" name="subject" value="{{ d.subject }}" maxlength="300"></div>
+      <div class="field"><label for="b-{{ d.id }}">النص</label><textarea id="b-{{ d.id }}" name="body" rows="12">{{ d.body }}</textarea></div>
+      <div class="actions"><button class="btn btn-secondary" type="submit">حفظ إصدار جديد</button></div>
+    </form>
+  </details>
+
+  <div class="actions decision">
+    <form method="post" action="/approvals/{{ d.id }}/decision">
+      {{ csrf() }}
+      <input type="hidden" name="revision" value="{{ d.revision }}">
+      <input type="hidden" name="content_hash" value="{{ d.content_hash }}">
+      <input type="hidden" name="decision" value="approve">
+      <button class="btn" type="submit" {% if x.blocking or (d.channel == "email" and x.eligibility != "allowed") %}disabled{% endif %}>
+        {{ "اعتماد وإرسال" if d.channel == "email" else "اعتماد (تواصل يدوي بواتساب)" }}
+      </button>
+    </form>
+    <form method="post" action="/approvals/{{ d.id }}/decision">
+      {{ csrf() }}
+      <input type="hidden" name="revision" value="{{ d.revision }}">
+      <input type="hidden" name="content_hash" value="{{ d.content_hash }}">
+      <input type="hidden" name="decision" value="defer">
+      <input type="hidden" name="defer_hours" value="24">
+      <button class="btn btn-secondary" type="submit">تأجيل يومًا</button>
+    </form>
+    <form method="post" action="/approvals/{{ d.id }}/decision">
+      {{ csrf() }}
+      <input type="hidden" name="revision" value="{{ d.revision }}">
+      <input type="hidden" name="content_hash" value="{{ d.content_hash }}">
+      <input type="hidden" name="decision" value="reject">
+      <button class="btn btn-quiet" type="submit">رفض</button>
+    </form>
+  </div>
+</article>
+{% else %}
+<p class="muted">لا مسودات بانتظار المراجعة.</p>
+{% endfor %}
+
+<h2>معتمدة ({{ approved | length }})</h2>
+{% for x in approved %}
+{% set d = x.draft %}
+<article class="card">
+  <h3><a href="/opportunities/{{ x.opp.id }}">{{ x.company.display_name }}</a> · {{ x.product.name }}</h3>
+  <p class="muted small">{{ label("channel", d.channel) }} · الإصدار {{ d.revision }} · <bdi dir="ltr">{{ d.recipient_snapshot.get("value", "—") }}</bdi></p>
+  {% if d.channel == "whatsapp" %}
+    {% set phone = (d.recipient_snapshot.get("value") or "") | replace("+", "") | replace(" ", "") %}
+    <p class="hint">واتساب يدوي: افتح المحادثة وأرسل النص بنفسك، ثم أكّد هنا. فتح الرابط أو النسخ وحده لا يغير الحالة.</p>
+    <pre class="message-body">{{ d.body }}</pre>
+    <div class="actions">
+      {% if phone %}<a class="btn btn-secondary" href="https://wa.me/{{ phone }}?text={{ d.body | urlencode }}" target="_blank" rel="noopener noreferrer">فتح واتساب</a>{% endif %}
+      <form method="post" action="/approvals/{{ d.id }}/manual-contact" class="actions">
+        {{ csrf() }}
+        <input type="text" name="note" placeholder="ملاحظة اختيارية" maxlength="500" aria-label="ملاحظة">
+        <button class="btn" type="submit">تم التواصل يدويًا</button>
+      </form>
+    </div>
+  {% else %}
+    <p>أمر الإرسال: {% if x.command %}<span class="badge tone-{{ tone(x.command.status) }}">{{ label("outbound", x.command.status) }}</span>{% if x.command.last_error %} <span class="muted small">{{ x.command.last_error }}</span>{% endif %}{% else %}—{% endif %}</p>
+  {% endif %}
+</article>
+{% else %}
+<p class="muted">لا شيء معتمد بانتظار الإرسال.</p>
+{% endfor %}
+{% endblock %}

@@ -6,6 +6,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -92,10 +93,132 @@ async def source_sample_failed(db: AsyncSession, lease: Lease, error: str) -> No
         src.last_error = error[:500]
 
 
+def _deps(ctx: HandlerContext) -> Any:
+    from app.workflows.common import Deps
+
+    return Deps(
+        settings=ctx.settings, sm=ctx.sessionmaker, resolver=ctx.resolver, transport=ctx.transport
+    )
+
+
+async def _finish(ctx: HandlerContext, lease: Lease, result: dict[str, Any]) -> dict[str, Any]:
+    async with ctx.sessionmaker() as db, db.begin():
+        await queue.assert_lease(db, lease)
+        simple = {
+            k: v for k, v in result.items() if isinstance(v, (str, int, float, bool, type(None)))
+        }
+        await queue.complete(db, lease, simple)
+    return result
+
+
+def _ws(lease: Lease) -> uuid.UUID:
+    if lease.workspace_id is None:
+        raise PermanentJobError("المهمة بلا workspace")
+    return lease.workspace_id
+
+
+async def _reschedule(ctx: HandlerContext, lease: Lease, minutes: int, note: str) -> dict[str, Any]:
+    async with ctx.sessionmaker() as db, db.begin():
+        await queue.reschedule(db, lease, datetime.now(UTC) + timedelta(minutes=minutes), note)
+    return {"status": "rescheduled"}
+
+
+async def discover_daily(ctx: HandlerContext, lease: Lease) -> dict[str, Any] | None:
+    from app.workflows.discovery import run_discovery
+
+    return await _finish(
+        ctx, lease, await run_discovery(_deps(ctx), _ws(lease), job_id=lease.job_id)
+    )
+
+
+async def process_window(ctx: HandlerContext, lease: Lease) -> dict[str, Any] | None:
+    from app.workflows.processing import LockBusy, run_window
+
+    opp = lease.payload.get("opportunity_id")
+    try:
+        result = await run_window(
+            _deps(ctx),
+            _ws(lease),
+            job_id=lease.job_id,
+            opportunity_id=uuid.UUID(opp) if opp else None,
+        )
+    except LockBusy as exc:
+        return await _reschedule(ctx, lease, 2, str(exc))
+    return await _finish(
+        ctx, lease, {"status": result["status"], "reason": result.get("reason", "")}
+    )
+
+
+async def resume_opportunity(ctx: HandlerContext, lease: Lease) -> dict[str, Any] | None:
+    from app.workflows.opportunity import resume_opportunity as resume
+
+    result = await resume(_deps(ctx), lease.payload["thread_id"], lease.payload.get("decision"))
+    return await _finish(ctx, lease, result)
+
+
+async def send_outbound(ctx: HandlerContext, lease: Lease) -> dict[str, Any] | None:
+    from app.services.outbound import send_outbound as send
+
+    return await send(_deps(ctx), lease)
+
+
+async def notify_draft(ctx: HandlerContext, lease: Lease) -> dict[str, Any] | None:
+    from app.services.telegram_bot import send_draft_card
+
+    result = await send_draft_card(_deps(ctx), _ws(lease), uuid.UUID(lease.payload["draft_id"]))
+    return await _finish(ctx, lease, result)
+
+
+async def mail_sync(ctx: HandlerContext, lease: Lease) -> dict[str, Any] | None:
+    from app.services.inbound import sync_mailbox
+
+    return await _finish(ctx, lease, await sync_mailbox(_deps(ctx), _ws(lease)))
+
+
+async def process_reply(ctx: HandlerContext, lease: Lease) -> dict[str, Any] | None:
+    from app.services.inbound import draft_reply
+    from app.workflows.processing import LockBusy, sales_lock
+
+    try:
+        async with sales_lock(_deps(ctx), _ws(lease)):
+            result = await draft_reply(
+                _deps(ctx), _ws(lease), uuid.UUID(lease.payload["message_id"])
+            )
+    except LockBusy as exc:
+        return await _reschedule(ctx, lease, 2, str(exc))
+    return await _finish(ctx, lease, result)
+
+
+async def digest(ctx: HandlerContext, lease: Lease) -> dict[str, Any] | None:
+    from app.services.digest import run_digest
+
+    return await _finish(ctx, lease, await run_digest(_deps(ctx), _ws(lease)))
+
+
+async def cleanup(ctx: HandlerContext, lease: Lease) -> dict[str, Any] | None:
+    from app.services.cleanup import run_cleanup
+
+    return await _finish(ctx, lease, await run_cleanup(_deps(ctx)))
+
+
+async def noop(ctx: HandlerContext, lease: Lease) -> dict[str, Any] | None:
+    return await _finish(ctx, lease, {"status": "noop"})
+
+
 FailureHook = Callable[[AsyncSession, Lease, str], Awaitable[None]]
 
 HANDLERS: dict[str, Handler] = {
     source_service.SOURCE_SAMPLE_JOB: source_sample,
+    "discover_daily": discover_daily,
+    "process_window": process_window,
+    "resume_opportunity": resume_opportunity,
+    "send_outbound": send_outbound,
+    "notify_draft": notify_draft,
+    "mail_sync": mail_sync,
+    "process_reply": process_reply,
+    "digest": digest,
+    "cleanup": cleanup,
+    "noop": noop,
 }
 FAILURE_HOOKS: dict[str, FailureHook] = {
     source_service.SOURCE_SAMPLE_JOB: source_sample_failed,

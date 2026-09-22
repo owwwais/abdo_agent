@@ -171,3 +171,26 @@ def parse_html(html: str, base_url: str) -> ParsedPage:
     )
     page.links = page.links[:200]
     return page
+
+
+def link_texts(html: str, base_url: str, limit: int = 200) -> list[tuple[str, str]]:
+    """روابط الصفحة مع نصوصها (لقوائم الأدلة): [(نص، رابط مطلق)] بلا تكرار."""
+    soup = BeautifulSoup(html, "html.parser")
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for a in soup.find_all("a", href=True):
+        href = str(a["href"]).strip()
+        if href.lower().startswith(("mailto:", "tel:", "javascript:", "data:", "#")):
+            continue
+        absolute = urljoin(base_url, href)
+        if not absolute.startswith(("http://", "https://")):
+            continue
+        url = canonical_url(absolute)
+        text = clean(a.get_text(" "), 200)
+        if url in seen or not text:
+            continue
+        seen.add(url)
+        out.append((text, url))
+        if len(out) >= limit:
+            break
+    return out

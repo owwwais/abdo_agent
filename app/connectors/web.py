@@ -20,7 +20,7 @@ from app.connectors.base import (
     ValidationReport,
 )
 from app.connectors.fetch import TEXT_TYPES, FetchError, FetchLimits, FetchResult, SafeFetcher
-from app.connectors.htmlparse import ParsedPage, clean, parse_html, strip_html
+from app.connectors.htmlparse import ParsedPage, clean, link_texts, parse_html, strip_html
 from app.connectors.netguard import BlockedUrl, Resolver, check_url, host_allowed, path_allowed
 
 _CONTACT_HINTS = (
@@ -302,6 +302,48 @@ class HtmlConnector(_WebBase):
         except TimeoutError:
             issues.append(ConnectorIssue(code="timeout", message="انتهت مهلة الفحص الكلية"))
         return self._finish(records, fetcher, pages, issues, EXPECTED_FIELDS, config)
+
+    async def list_directory(
+        self, config: SourceConfig, limit: int
+    ) -> tuple[list[SampleRecord], int]:
+        """صفحة الدليل: روابط التفاصيل ضمن المسارات المسموحة (دون جلب كل صفحة). يعيد (سجلات، طلبات)."""
+        report = await self.validate(config)
+        if report.status != "succeeded" or not config.url:
+            return [], 0
+        fetcher = self._fetcher(config)
+        try:
+            async with fetcher, asyncio.timeout(config.timeout_seconds):
+                robots = await self._robots(fetcher, config.url)
+                if isinstance(robots, SampleResult) or not robots.can_fetch(
+                    self._ua_token, config.url
+                ):
+                    return [], fetcher.request_count
+                res = await fetcher.get(
+                    config.url, accept=frozenset({"text/html", "application/xhtml+xml"})
+                )
+                if not res.ok:
+                    return [], fetcher.request_count
+                records = []
+                for text, url in link_texts(res.text, res.url):
+                    parts = urlsplit(url)
+                    if not host_allowed(parts.hostname or "", list(config.allowed_hosts)):
+                        continue
+                    if config.allowed_paths and not path_allowed(
+                        parts.path, list(config.allowed_paths)
+                    ):
+                        continue
+                    if url.rstrip("/") == config.url.rstrip("/") or not robots.can_fetch(
+                        self._ua_token, url
+                    ):
+                        continue
+                    records.append(
+                        SampleRecord(source_record_id=url, url=url, fields={"name": text})
+                    )
+                    if len(records) >= limit:
+                        break
+                return records, fetcher.request_count
+        except (FetchError, TimeoutError):
+            return [], fetcher.request_count
 
     @staticmethod
     def _record(page: ParsedPage) -> SampleRecord:

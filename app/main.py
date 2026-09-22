@@ -21,12 +21,15 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api.errors import AppError, Unauthenticated
 from app.api.routes import router as api_router
+from app.api.sales_api import router as sales_api_router
+from app.api.webhooks import router as webhooks_router
 from app.auth.providers import SupabaseAuth
 from app.config import Settings, get_settings
 from app.db.session import create_engine, loop_factory, make_sessionmaker
 from app.services.common import validation_details
 from app.web.pages import router as pages_router
 from app.web.render import render
+from app.web.sales_pages import router as sales_pages_router
 from app.web.settings_pages import router as settings_router
 
 log = logging.getLogger("app")
@@ -112,8 +115,11 @@ def create_app(settings: Settings | None = None, engine: AsyncEngine | None = No
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(api_router)
+    app.include_router(sales_api_router)
+    app.include_router(webhooks_router)
     app.include_router(pages_router)
     app.include_router(settings_router)
+    app.include_router(sales_pages_router)
     return app
 
 

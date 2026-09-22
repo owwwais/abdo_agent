@@ -73,6 +73,7 @@ def migrated_db() -> str:
     try:
         with engine.begin() as conn:
             conn.execute(text("DROP SCHEMA IF EXISTS sales CASCADE"))
+            conn.execute(text("DROP SCHEMA IF EXISTS sales_graph CASCADE"))
     except Exception as exc:
         pytest.exit(
             f"تعذر الاتصال بقاعدة الاختبار {TEST_DB_URL}: {exc}\n"
@@ -82,6 +83,12 @@ def migrated_db() -> str:
     finally:
         engine.dispose()
     command.upgrade(alembic_config(), "head")
+    import asyncio as _asyncio
+
+    from app.db.session import loop_factory
+    from app.workflows.checkpoint import setup_checkpointer
+
+    _asyncio.run(setup_checkpointer(make_settings()), loop_factory=loop_factory())
     return TEST_DB_URL
 
 
@@ -123,6 +130,22 @@ async def _clean(request: pytest.FixtureRequest) -> AsyncIterator[None]:
         if tables:
             await conn.execute(
                 text("TRUNCATE " + ", ".join(f"sales.{t}" for t in tables) + " CASCADE")
+            )
+        graph_tables = (
+            (
+                await conn.execute(
+                    text(
+                        "SELECT tablename FROM pg_tables WHERE schemaname = 'sales_graph' "
+                        "AND tablename <> 'checkpoint_migrations'"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if graph_tables:
+            await conn.execute(
+                text("TRUNCATE " + ", ".join(f"sales_graph.{t}" for t in graph_tables))
             )
     yield
 

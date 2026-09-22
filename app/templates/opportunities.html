@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}الفرص{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>الفرص</h1>
+    <p class="lead">كل فرصة = شركة × منتج. الدرجة لا تُحسب إلا من أدلة موثقة بمصدر.</p>
+  </div>
+</div>
+<nav class="tabs" aria-label="تصفية حسب الحالة">
+  <a href="/opportunities" {% if not status %}aria-current="page"{% endif %}>الكل ({{ counts.values() | sum }})</a>
+  {% for k, v in labels.items() %}{% if counts.get(k) %}
+  <a href="/opportunities?status={{ k }}" {% if status == k %}aria-current="page"{% endif %}>{{ v }} ({{ counts[k] }})</a>
+  {% endif %}{% endfor %}
+</nav>
+<div class="table-wrap">
+  <table class="responsive">
+    <thead><tr><th>الشركة</th><th>المنتج</th><th>الحالة</th><th>الدرجة</th><th>آخر تحديث</th></tr></thead>
+    <tbody>
+      {% for o, c, pr in rows %}
+      <tr>
+        <td data-label="الشركة"><a href="/opportunities/{{ o.id }}">{{ c.display_name }}</a>{% if o.is_demo_data %} <span class="badge tone-muted">demo</span>{% endif %}</td>
+        <td data-label="المنتج">{{ pr.name }}</td>
+        <td data-label="الحالة"><span class="badge tone-{{ tone(o.status) }}">{{ label("opportunity", o.status) }}</span></td>
+        <td data-label="الدرجة">{{ o.score if o.score is not none else "~" ~ o.preliminary_score }}</td>
+        <td data-label="آخر تحديث">{{ o.updated_at | dt }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">لا فرص بعد. شغّل دورة اكتشاف من صفحة «التشغيل» بعد تجهيز فئة ومنتج ومصدر نشط.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if total > 50 %}
+<div class="actions">
+  {% if page > 1 %}<a class="btn btn-quiet" href="?{% if status %}status={{ status }}&{% endif %}page={{ page - 1 }}">السابق</a>{% endif %}
+  <span class="muted">صفحة {{ page }}</span>
+  {% if page * 50 < total %}<a class="btn btn-quiet" href="?{% if status %}status={{ status }}&{% endif %}page={{ page + 1 }}">التالي</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}التشغيل{% endblock %}
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">{% endmacro %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>التشغيل والسجلات</h1>
+    <p class="lead">كل تشغيل يسجل خطواته بملخص منقح بلا أسرار. التشغيل اليدوي يضع مهمة في الطابور ولا يتجاوز الحصص أو الميزانية.</p>
+  </div>
+</div>
+
+{% if principal.is_owner %}
+<section class="card">
+  <h2>تشغيل يدوي</h2>
+  <div class="actions">
+    <form method="post" action="/runs/start">{{ csrf() }}<input type="hidden" name="kind" value="discover"><button class="btn" type="submit">دورة اكتشاف اليوم</button></form>
+    <form method="post" action="/runs/start">{{ csrf() }}<input type="hidden" name="kind" value="process"><button class="btn btn-secondary" type="submit">معالجة فرصة واحدة</button></form>
+    <form method="post" action="/runs/start">{{ csrf() }}<input type="hidden" name="kind" value="mail_sync"><button class="btn btn-secondary" type="submit">مزامنة البريد</button></form>
+    <form method="post" action="/runs/start">{{ csrf() }}<input type="hidden" name="kind" value="digest"><button class="btn btn-quiet" type="submit">ملخص اليوم</button></form>
+  </div>
+  <p class="hint">دورة الاكتشاف مرة واحدة لكل يوم محلي؛ تكرار الضغط لا ينشئ دورة ثانية.</p>
+</section>
+{% endif %}
+
+<div class="grid">
+  <section class="card">
+    <h2>التشغيلات</h2>
+    <ul class="plain small">
+      {% for r in runs %}
+      <li {% if selected == (r.id | string) %}aria-current="true"{% endif %}>
+        <a href="/runs?run={{ r.id }}">{{ label("run_kind", r.kind) }}</a>
+        <span class="badge tone-{{ tone(r.status) }}">{{ label("run", r.status) }}</span>
+        {{ r.started_at | dt }}{% if r.opportunity_id %} · <a href="/opportunities/{{ r.opportunity_id }}">الفرصة</a>{% endif %}
+        {% if r.summary.get("reason") %}<div class="muted">{{ r.summary.get("reason") }}</div>{% endif %}
+      </li>
+      {% else %}<li class="muted">لا تشغيلات بعد.</li>{% endfor %}
+    </ul>
+  </section>
+  <section class="card">
+    <h2>الخطوات</h2>
+    {% if events %}
+    <ol class="small">
+      {% for e in events %}<li><strong>{{ e.step }}</strong> · {{ e.event_type }} · {{ e.occurred_at | dt }}{% if e.sanitized_summary %}<div class="muted">{{ e.sanitized_summary }}</div>{% endif %}</li>{% endfor %}
+    </ol>
+    {% else %}<p class="muted">اختر تشغيلًا لعرض خطواته.</p>{% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>الطابور</h2>
+  <div class="table-wrap">
+    <table class="responsive">
+      <thead><tr><th>النوع</th><th>الحالة</th><th>المحاولات</th><th>موعد التنفيذ</th><th>آخر خطأ</th></tr></thead>
+      <tbody>
+      {% for j in jobs %}
+      <tr>
+        <td data-label="النوع"><bdi dir="ltr">{{ j.kind }}</bdi></td>
+        <td data-label="الحالة"><span class="badge tone-{{ tone(j.status) }}">{{ label("job", j.status) }}</span></td>
+        <td data-label="المحاولات">{{ j.attempts }}/{{ j.max_attempts }}</td>
+        <td data-label="الموعد">{{ j.run_after | dt }}</td>
+        <td data-label="آخر خطأ" class="small muted">{{ (j.last_error or "") | truncate(160) }}</td>
+      </tr>
+      {% else %}<tr><td colspan="5" class="muted">الطابور فارغ.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

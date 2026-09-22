@@ -243,9 +243,12 @@ async def today(
         ("مصدر نشط", sources_active > 0, "/sources"),
     ]
     workspace = await db.get(Workspace, ws)
+    assert workspace is not None
+    sales = await _today_sales(db, request.app.state.settings, workspace)
     return render(
         request,
         "today.html",
+        **sales,
         setup=setup,
         products_active=products_active,
         sources_active=sources_active,
@@ -258,6 +261,58 @@ async def today(
         worker_alive=worker_alive,
         workspace=workspace,
     )
+
+
+async def _today_sales(
+    db: AsyncSession, settings: Settings, workspace: Workspace
+) -> dict[str, Any]:
+    """أرقام المبيعات لصفحة اليوم: الموافقات والحصة والميزانية والتنبيهات والإيقاف."""
+    from app.db.models_ops import DailyQuota, Digest, Run
+    from app.db.models_sales import Draft, Message, OutboundCommand
+    from app.services import budget
+    from app.services import integrations as integ
+    from app.services.connection_tests import live_readiness
+    from app.workflows.common import local_today
+
+    ws = workspace.id
+    ops = await integ.get_config(db, settings, ws, "operations", integ.OperationsConfig)
+    today_local = local_today(workspace.timezone)
+
+    async def n(model: Any, *where: Any) -> int:
+        q = select(func.count()).select_from(model).where(model.workspace_id == ws, *where)
+        return int((await db.execute(q)).scalar_one())
+
+    quota = await db.get(DailyQuota, (ws, today_local))
+    last_discovery = (
+        await db.execute(
+            select(Run)
+            .where(Run.workspace_id == ws, Run.kind == "discover")
+            .order_by(Run.started_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    digest = (
+        await db.execute(
+            select(Digest)
+            .where(Digest.workspace_id == ws)
+            .order_by(Digest.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    readiness = await live_readiness(db, settings, ws)
+    return {
+        "ops": ops,
+        "pending_approvals": await n(Draft, Draft.status == "pending_review"),
+        "unknown_delivery": await n(OutboundCommand, OutboundCommand.status == "unknown_delivery"),
+        "needs_linking": await n(Message, Message.link_status == "needs_linking"),
+        "quota_used": quota.qualified_slots_used if quota else 0,
+        "discovered_today": quota.discovery_count if quota else 0,
+        "usage": await budget.usage_summary(db, ws, workspace.timezone),
+        "last_discovery": last_discovery,
+        "digest": digest,
+        "readiness": readiness,
+        "outbound_enabled": settings.outbound_enabled,
+    }
 
 
 # ---------------------------------------------------------------- الفئات
