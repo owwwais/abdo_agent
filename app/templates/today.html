@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}اليوم{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>اليوم</h1>
+    <p class="lead">{{ workspace.name }} · وضع التشغيل: {{ "تجريبي" if workspace.operating_mode == "demo" else "فعلي" }}</p>
+  </div>
+</div>
+
+{% if not worker_alive %}
+<p class="notice notice-warn" role="status">العامل (worker) لا يرسل نبضات حاليًا{% if heartbeat %}؛ آخر نبضة {{ heartbeat.last_seen_at | dt }}{% endif %}. فحوص المصادر تبقى في الطابور حتى يعمل. شغّله بـ <bdi dir="ltr">uv run python -m app.jobs.worker</bdi>.</p>
+{% endif %}
+
+<div class="grid">
+  <section class="card">
+    <h2>جاهزية الإعداد</h2>
+    <ul class="plain checklist">
+      {% for text, done, href in setup %}
+      <li class="{{ 'done' if done else '' }}"><a href="{{ href }}">{{ text }}</a> — {{ "متوفر" if done else "مطلوب قبل دورة البحث" }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  <section class="card">
+    <h2>الشركات</h2>
+    <div class="stat">{{ companies_total }}</div>
+    <div class="stat-label">إجمالي الجهات المسجلة</div>
+    {% if companies_review %}<p><a href="/companies?status=needs_review">{{ companies_review }} تحتاج مراجعة تكرار محتمل</a></p>{% endif %}
+  </section>
+  <section class="card">
+    <h2>الطابور</h2>
+    <div class="stat">{{ jobs_pending }}</div>
+    <div class="stat-label">مهام معلقة أو قيد التنفيذ</div>
+    {% if jobs_failed %}<p><a href="/settings">{{ jobs_failed }} مهمة فشلت</a></p>{% endif %}
+  </section>
+</div>
+
+{% if problem_sources %}
+<section class="card">
+  <h2>مصادر تحتاج انتباهًا</h2>
+  <ul class="plain">
+    {% for s in problem_sources %}
+    <li><a href="/sources/{{ s.id }}">{{ s.name }}</a> <span class="badge tone-{{ tone(s.status) }}">{{ label("source", s.status) }}</span> <span class="muted small">{{ s.status_reason or "" }}</span></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>ما لم يُبنَ بعد في هذه النسخة</h2>
+  <p class="muted">الموافقات والحصص اليومية والميزانية وآخر دورة بحث والإيقاف تظهر هنا عند بنائها (المراحل M2–M5). لا تُعرض أرقام لها قبل وجود بيانات حقيقية.</p>
+</section>
+{% endblock %}

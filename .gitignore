@@ -1,0 +1,15 @@
+.venv/
+.local/
+.env
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+test-results/
+playwright-report/
+
+# إعدادات محلية للأدوات
+.claude/settings.local.json
+# النسخة الأصلية للمواصفة خارج المستودع؛ النسخة المتتبعة هي SPEC.md
+sales-research-agent-harness.md

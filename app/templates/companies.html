@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}الشركات{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>الشركات</h1>
+    <p class="lead">الجهات المسجلة من الإدخال اليدوي والاستيراد. الدمج التلقائي فقط بمعرف قوي؛ الباقي للمراجعة.</p>
+  </div>
+  <a class="btn" href="/imports">إضافة أو استيراد</a>
+</div>
+<nav class="actions" aria-label="تصفية">
+  <a class="btn btn-quiet" href="/companies" {% if not status %}aria-current="page"{% endif %}>الكل</a>
+  <a class="btn btn-quiet" href="/companies?status=needs_review" {% if status == "needs_review" %}aria-current="page"{% endif %}>تحتاج مراجعة</a>
+  <a class="btn btn-quiet" href="/companies?status=active" {% if status == "active" %}aria-current="page"{% endif %}>نشطة</a>
+</nav>
+<div class="card table-wrap">
+  <table class="responsive">
+    <thead><tr><th>الجهة</th><th>النطاق</th><th>النشاط</th><th>الفئة</th><th>المنطقة</th><th>الحالة</th><th>أُضيفت</th></tr></thead>
+    <tbody>
+    {% for c in companies %}
+    <tr>
+      <td data-label="الجهة"><a href="/companies/{{ c.id }}">{{ c.display_name }}</a>{% if c.is_demo_data %} <span class="badge tone-muted">demo</span>{% endif %}</td>
+      <td data-label="النطاق">{% if c.domain %}<bdi dir="ltr">{{ c.domain }}</bdi>{% else %}—{% endif %}</td>
+      <td data-label="النشاط">{{ c.sector or "—" }}</td>
+      <td data-label="الفئة">{{ segment_names.get(c.segment_id, "—") }}</td>
+      <td data-label="المنطقة">{{ c.region or c.city or "—" }}</td>
+      <td data-label="الحالة"><span class="badge tone-{{ tone(c.status) }}">{{ label("company", c.status) }}</span></td>
+      <td data-label="أُضيفت">{{ c.created_at | dt }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">لا توجد جهات{% if status %} بهذه الحالة{% endif %}.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="pager">
+    <span class="muted small">{{ total }} جهة</span>
+    {% if page > 1 %}<a href="?page={{ page - 1 }}{% if status %}&status={{ status }}{% endif %}">السابق</a>{% endif %}
+    {% if page * per_page < total %}<a href="?page={{ page + 1 }}{% if status %}&status={{ status }}{% endif %}">التالي</a>{% endif %}
+  </div>
+</div>
+{% endblock %}

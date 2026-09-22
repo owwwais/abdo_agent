@@ -1,0 +1,49 @@
+{# حقول إعداد المصدر المشتركة بين الإنشاء والتعديل. #}
+{% macro fv(name, fallback) %}{{ form.get(name, '') if form else fallback }}{% endmacro %}
+<div class="field">
+  <label for="url">الرابط</label>
+  <input id="url" name="url" type="url" class="ltr" maxlength="2000" value="{{ fv('url', source.url or '' if source else '') }}">
+  <span class="hint">http أو https فقط. العناوين الداخلية والمحلية مرفوضة قبل أي اتصال.</span>
+</div>
+<div class="row">
+  <div class="field">
+    <label for="allowed_hosts">النطاقات المسموحة</label>
+    <textarea id="allowed_hosts" name="allowed_hosts" class="ltr">{{ fv('allowed_hosts', source.allowed_hosts|join("\n") if source else '') }}</textarea>
+    <span class="hint">سطر لكل نطاق. فارغ = نطاق الرابط ونسخته www. استخدم ‎*.example.com للنطاقات الفرعية.</span>
+  </div>
+  <div class="field">
+    <label for="allowed_paths">المسارات المسموحة</label>
+    <textarea id="allowed_paths" name="allowed_paths" class="ltr">{{ fv('allowed_paths', source.allowed_paths|join("\n") if source else '') }}</textarea>
+    <span class="hint">لأدلة HTML: مسارات صفحات التفاصيل مثل ‎/directory/‎. فارغ = صفحة المنشأة وصفحات التواصل فقط.</span>
+  </div>
+</div>
+<div class="row">
+  <div class="field"><label for="max_pages">حد الصفحات</label><input id="max_pages" name="max_pages" type="number" min="1" max="20" value="{{ fv('max_pages', source.max_pages if source else 3) }}"></div>
+  <div class="field"><label for="max_records">حد السجلات</label><input id="max_records" name="max_records" type="number" min="1" max="50" value="{{ fv('max_records', source.max_records if source else 5) }}"></div>
+  <div class="field"><label for="max_requests">حد الطلبات</label><input id="max_requests" name="max_requests" type="number" min="1" max="50" value="{{ fv('max_requests', source.max_requests if source else 6) }}"></div>
+  <div class="field"><label for="timeout_seconds">المهلة (ثانية)</label><input id="timeout_seconds" name="timeout_seconds" type="number" min="5" max="120" value="{{ fv('timeout_seconds', source.timeout_seconds if source else 60) }}"></div>
+</div>
+<div class="row">
+  <div class="field"><label for="refresh_interval_hours">فترة التحديث (ساعة)</label><input id="refresh_interval_hours" name="refresh_interval_hours" type="number" min="1" max="720" value="{{ fv('refresh_interval_hours', source.refresh_interval_hours if source else 24) }}"></div>
+  <div class="field"><label for="retention_days">مدة الاحتفاظ (يوم)</label><input id="retention_days" name="retention_days" type="number" min="1" max="3650" value="{{ fv('retention_days', source.retention_days if source else 90) }}"></div>
+  <div class="field">
+    <label for="credential_ref">مرجع السر</label>
+    <input id="credential_ref" name="credential_ref" type="text" class="ltr" maxlength="64" value="{{ fv('credential_ref', source.credential_ref or '' if source else '') }}">
+    <span class="hint">اسم متغير بيئة مثل SOURCE_X_API_KEY، وليس المفتاح نفسه.</span>
+  </div>
+</div>
+{% set raw_checked = (form.get('store_raw') == 'on') if form else (source.store_raw if source else False) %}
+<label class="check"><input type="checkbox" name="store_raw" {% if raw_checked %}checked{% endif %}> <span>مسموح حفظ المحتوى الخام من هذا المصدر (افتراضيًا تُحفظ الحقول المستخرجة فقط)</span></label>
+<fieldset>
+  <legend>الفئات التي يخدمها المصدر</legend>
+  {% set chosen = form.getlist('segment_ids') if form else linked_ids %}
+  <div class="checks">
+    {% for s in segments %}
+    <label class="check"><input type="checkbox" name="segment_ids" value="{{ s.id }}" {% if s.id|string in chosen %}checked{% endif %}> <span>{{ s.name }}</span></label>
+    {% else %}<p class="muted">لا توجد فئات نشطة.</p>{% endfor %}
+  </div>
+</fieldset>
+<div class="field">
+  <label for="policy_notes">ملاحظات السياسة والاستخدام</label>
+  <textarea id="policy_notes" name="policy_notes" maxlength="2000">{{ fv('policy_notes', source.policy_notes if source else '') }}</textarea>
+</div>

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}المنتجات{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>المنتجات</h1>
+    <p class="lead">لا يُفعّل منتج دون وصف مشكلة وفئة مستهدفة وخصائص معتمدة. إضافة منتج لا تزيد الحصة اليومية.</p>
+  </div>
+  {% if principal.is_owner %}<a class="btn" href="/products/new">منتج جديد</a>{% endif %}
+</div>
+<div class="card table-wrap">
+  <table class="responsive">
+    <thead><tr><th>المنتج</th><th>الحالة</th><th>الأولوية</th><th>السعر</th><th>الإصدار</th><th>آخر تعديل</th></tr></thead>
+    <tbody>
+    {% for x in products %}
+      <tr>
+        <td data-label="المنتج"><a href="/products/{{ x.id }}">{{ x.name }}</a>{% if x.is_demo_data %} <span class="badge tone-muted">demo</span>{% endif %}</td>
+        <td data-label="الحالة"><span class="badge tone-{{ tone(x.status) }}">{{ label("product", x.status) }}</span></td>
+        <td data-label="الأولوية">{{ x.priority }}</td>
+        <td data-label="السعر"><span class="badge tone-{{ tone(x.price_status) }}">{{ label("price", x.price_status) }}</span></td>
+        <td data-label="الإصدار">{{ x.version }}</td>
+        <td data-label="آخر تعديل">{{ x.updated_at | dt }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="muted">لا توجد منتجات. {% if principal.is_owner %}<a href="/products/new">أضف أول منتج</a>.{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}{{ source.name }}{% endblock %}
+{% block head %}{% if job %}<meta http-equiv="refresh" content="5; url=/sources/{{ source.id }}">{% endif %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ source.name }}</h1>
+    <p class="lead">
+      {{ label("kind", source.kind) }} · <span class="badge tone-{{ tone(source.status) }}">{{ label("source", source.status) }}</span>
+      · إصدار الإعداد {{ source.config_version }}
+    </p>
+  </div>
+</div>
+
+{% if source.status_reason %}<p class="notice notice-{{ 'bad' if source.status in ('failed','restricted') else 'info' }}">{{ source.status_reason }}</p>{% endif %}
+{% if job %}<p class="notice notice-info" role="status">فحص العينة {{ label("job", job.status) }} (محاولة {{ job.attempts }}). تُحدَّث الصفحة تلقائيًا كل 5 ثوانٍ.</p>{% endif %}
+{% if stale_validating %}<p class="notice notice-warn">الحالة «قيد الفحص» دون مهمة نشطة؛ أعد الفحص.</p>{% endif %}
+
+<div class="grid">
+  <section class="card">
+    <h2>الإعداد الحالي</h2>
+    <dl class="kv">
+      <dt>الرابط</dt><dd>{% if source.url %}<bdi dir="ltr">{{ source.url }}</bdi>{% else %}—{% endif %}</dd>
+      <dt>الموصل</dt><dd><bdi dir="ltr">{{ source.connector_key }}</bdi> · {{ kind_spec.help }}</dd>
+      {% if kind_spec.fetches and source.connector_key in ("html", "rss") %}
+      <dt>النطاقات</dt><dd>{% for h in source.allowed_hosts %}<bdi dir="ltr">{{ h }}</bdi>{% if not loop.last %}، {% endif %}{% else %}—{% endfor %}</dd>
+      <dt>المسارات</dt><dd>{% for h in source.allowed_paths %}<bdi dir="ltr">{{ h }}</bdi>{% if not loop.last %}، {% endif %}{% else %}كل المسارات ضمن النطاق{% endfor %}</dd>
+      <dt>الحدود</dt><dd>{{ source.max_pages }} صفحات · {{ source.max_records }} سجلات · {{ source.max_requests }} طلبات · {{ source.timeout_seconds }} ثانية</dd>
+      {% else %}
+      <dt>الشبكة</dt><dd>{{ "لا اتصال شبكي؛ إدخال بشري فقط" if source.connector_key == "manual" else "يحتاج إعداد موصل" }}</dd>
+      {% endif %}
+      <dt>التخزين</dt><dd>{{ "مسموح حفظ المحتوى الخام" if source.store_raw else "الحقول المستخرجة فقط" }} · احتفاظ {{ source.retention_days }} يومًا</dd>
+      <dt>مرجع السر</dt><dd>{% if source.credential_ref %}<bdi dir="ltr">{{ source.credential_ref }}</bdi>{% else %}—{% endif %}</dd>
+      <dt>تأكيد السياسة</dt><dd>{% if source.policy_confirmed_at %}نسخة {{ source.policy_version }} في {{ source.policy_confirmed_at | dt }}{% else %}لم يُؤكَّد لهذا الإعداد{% endif %}</dd>
+      <dt>آخر نجاح</dt><dd>{{ source.last_success_at | dt }}</dd>
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2>الإجراءات</h2>
+    {% if principal.is_owner %}
+    <div class="actions">
+      <form method="post" action="/sources/{{ source.id }}/test">
+        <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+        <button class="btn" type="submit" {% if job %}disabled aria-disabled="true"{% endif %}>فحص عينة</button>
+      </form>
+      {% if source.status == "active" %}
+      <form method="post" action="/sources/{{ source.id }}/pause">
+        <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+        <input type="hidden" name="version" value="{{ source.config_version }}">
+        <button class="btn btn-danger" type="submit">إيقاف المصدر</button>
+      </form>
+      {% endif %}
+    </div>
+    <p class="hint">الفحص يعمل في العامل ضمن الحدود أعلاه، ولا يُعد نجاحه إذنًا بالاستخدام.</p>
+    {% else %}
+    <p class="muted">إدارة المصادر للمالك فقط.</p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>آخر فحص</h2>
+  {% if check %}
+  <p>
+    <span class="badge tone-{{ tone(check.status) }}">{{ label("check", check.status) }}</span>
+    {{ check.checked_at | dt }} · {{ check.request_count }} طلب · {{ (check.bytes_fetched / 1024) | round(1) }} ك.ب · {{ check.duration_ms }} م.ث
+    · التكلفة: {% if check.cost_amount is none %}غير معروفة{% else %}<bdi dir="ltr">{{ check.cost_amount | float }} {{ check.cost_currency or "" }}</bdi>{% endif %}
+    {% if check.config_version != source.config_version %}<span class="badge tone-warn">لإعداد سابق</span>{% endif %}
+    {% if check.sample_summary.synthetic %}<span class="badge tone-warn">بيانات اصطناعية</span>{% endif %}
+  </p>
+  <p>{{ check.sample_summary.message }}{% if check.sample_summary.next_step %} — {{ check.sample_summary.next_step }}{% endif %}</p>
+  {% if check.allowed_fields or check.missing_fields %}
+  <dl class="kv">
+    <dt>حقول وُجدت</dt><dd>{% for f in check.allowed_fields %}{{ label("field", f) }}{% if not loop.last %}، {% endif %}{% else %}—{% endfor %}</dd>
+    <dt>حقول ناقصة</dt><dd>{% for f in check.missing_fields %}{{ label("field", f) }}{% if not loop.last %}، {% endif %}{% else %}—{% endfor %}</dd>
+  </dl>
+  {% endif %}
+  {% if check.sample_summary.records %}
+  <div class="table-wrap">
+    <table class="responsive">
+      <thead><tr><th>السجل</th><th>الحقول المستخرجة</th></tr></thead>
+      <tbody>
+      {% for r in check.sample_summary.records %}
+      <tr>
+        <td data-label="السجل">{{ r.fields.name or "—" }}{% if r.url %}<br><bdi dir="ltr" class="small muted">{{ r.url }}</bdi>{% endif %}</td>
+        <td data-label="الحقول"><dl class="kv small">{% for k, v in r.fields.items() if k != "name" %}<dt>{{ label("field", k) }}</dt><dd>{{ v }}</dd>{% endfor %}</dl></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% if check.errors %}
+  <h3>ملاحظات الفحص</h3>
+  <ul>{% for e in check.errors %}<li>{{ e.message }}{% if e.url %} — <bdi dir="ltr">{{ e.url }}</bdi>{% endif %}</li>{% endfor %}</ul>
+  {% endif %}
+  {% else %}
+  <p class="muted">لم يُفحص المصدر بعد.</p>
+  {% endif %}
+</section>
+
+{% if principal.is_owner and can_activate %}
+<section class="card">
+  <h2>مراجعة الوصول والتخزين ثم التفعيل</h2>
+  <form class="stack" method="post" action="/sources/{{ source.id }}/activate">
+    <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+    <input type="hidden" name="version" value="{{ source.config_version }}">
+    <input type="hidden" name="policy_version" value="{{ policy_version }}">
+    <div class="checks">
+      {% for item in policy_items %}
+      <label class="check"><input type="checkbox" name="confirm_{{ loop.index0 }}" required> <span>{{ item }}</span></label>
+      {% endfor %}
+    </div>
+    <div class="field">
+      <label for="act-notes">ملاحظات السياسة (اختياري)</label>
+      <textarea id="act-notes" name="policy_notes" maxlength="2000">{{ source.policy_notes }}</textarea>
+    </div>
+    <div class="actions"><button class="btn" type="submit">تأكيد وتفعيل المصدر</button></div>
+  </form>
+</section>
+{% endif %}
+
+{% if principal.is_owner %}
+<details class="card" {% if form %}open{% endif %}>
+  <summary>تعديل الإعداد</summary>
+  <p class="hint">تغيير الرابط أو النطاقات أو الحدود أو التخزين يعيد المصدر إلى «جديد» ويتطلب فحصًا وتأكيدًا جديدين.</p>
+  <form class="stack" method="post" action="/sources/{{ source.id }}">
+    <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+    <input type="hidden" name="version" value="{{ source.config_version }}">
+    <div class="field">
+      <label for="name">اسم المصدر</label>
+      <input id="name" name="name" type="text" required maxlength="200" value="{{ form.get('name', '') if form else source.name }}">
+    </div>
+    {% include "_source_fields.html" %}
+    <div class="actions"><button class="btn" type="submit">حفظ الإعداد</button></div>
+  </form>
+</details>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,111 @@
+"""ربط نوع المصدر بمفتاح الموصل ووضع الوصول، وإنشاء الموصل المناسب."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import httpx
+
+from app.config import Settings
+from app.connectors.base import SourceConnector
+from app.connectors.netguard import Resolver
+from app.connectors.simple import FakeSearchConnector, ManualConnector, UnconfiguredConnector
+from app.connectors.web import HtmlConnector, RssConnector
+
+
+@dataclass(frozen=True)
+class KindSpec:
+    label: str
+    access_mode: str
+    needs_url: bool
+    fetches: bool  # هل يتصل بالشبكة
+    help: str
+
+
+SOURCE_KINDS: dict[str, KindSpec] = {
+    "manual": KindSpec(
+        "مقابلات وإحالات", "manual_only", False, False, "إدخال يدوي واستيراد CSV مع معاينة"
+    ),
+    "html": KindSpec(
+        "موقع منشأة أو دليل HTML عام",
+        "public_web",
+        True,
+        True,
+        "قارئ محدود لنطاق مصرح به؛ حدد المسارات المسموحة لصفحات الدليل",
+    ),
+    "rss": KindSpec("تغذية RSS/Atom", "public_web", True, True, "تغذية عامة مسموح استخدامها"),
+    "portal": KindSpec(
+        "بوابة فرص (مثل منصة «فرصة»)",
+        "public_web",
+        True,
+        True,
+        "تحليل المحتوى العام المسموح فقط؛ الوصول الخاص يحتاج موصلًا مخصصًا لاحقًا",
+    ),
+    "web_search": KindSpec(
+        "بحث ويب", "api_key", False, True, "يحتاج مزود بحث وحسابًا وشروط استخدام محددة"
+    ),
+    "linkedin": KindSpec(
+        "LinkedIn (يدوي)",
+        "manual_only",
+        False,
+        False,
+        "إدخال ومراجعة بشرية؛ لا تسجيل دخول آلي ولا scraping",
+    ),
+    "google_maps": KindSpec(
+        "Google Maps",
+        "api_key",
+        False,
+        True,
+        "غير مفعل افتراضيًا؛ يحتاج تحديد الاستخدام المسموح وسياسات البيانات",
+    ),
+}
+
+
+def connector_key_for(kind: str, settings: Settings) -> str:
+    if kind in ("manual", "linkedin"):
+        return "manual"
+    if kind in ("html", "portal"):
+        return "html"
+    if kind == "rss":
+        return "rss"
+    if kind == "web_search":
+        return (
+            "fake_search"
+            if settings.search_provider == "fake"
+            else f"search:{settings.search_provider}"
+        )
+    return kind
+
+
+def get_connector(
+    key: str,
+    settings: Settings,
+    *,
+    resolver: Resolver | None = None,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> SourceConnector:
+    if key == "manual":
+        return ManualConnector()
+    if key == "html":
+        return HtmlConnector(settings, resolver=resolver, transport=transport)
+    if key == "rss":
+        return RssConnector(settings, resolver=resolver, transport=transport)
+    if key == "fake_search":
+        if settings.app_env.value == "production":
+            return UnconfiguredConnector(
+                key, "FakeSearch ممنوع في production", "اضبط مزود بحث حقيقيًا"
+            )
+        return FakeSearchConnector(settings)
+    if key.startswith("search:"):
+        return UnconfiguredConnector(
+            key,
+            f"مزود البحث «{key[7:]}» غير منفذ بعد",
+            "اختر المزود وحسابه وشروطه ثم أضف موصله (قرار مفتوح في SPEC §17)",
+        )
+    if key == "google_maps":
+        return UnconfiguredConnector(
+            key,
+            "Google Maps غير مفعل افتراضيًا",
+            "حدد الاستخدام المسموح وفق سياسات Google Places ثم أضف موصلًا مخصصًا",
+        )
+    return UnconfiguredConnector(key, "موصل غير معروف", "راجع إعداد المصدر")

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %} · وكيل البحث والمبيعات</title>
+  <link rel="stylesheet" href="/static/app.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <a class="skip" href="#main">تخطَّ إلى المحتوى</a>
+  {% if env in ("demo", "development", "test") %}
+  <div class="env-banner" role="note">
+    بيئة <bdi dir="ltr">{{ env }}</bdi>: موصلات اصطناعية أو محلية، ولا إرسال حقيقي لأي جهة.
+  </div>
+  {% endif %}
+  <header class="topbar">
+    <a class="brand" href="/">وكيل البحث والمبيعات</a>
+    {% if principal %}
+    <nav class="nav" aria-label="التنقل الرئيسي">
+      {% set items = [("/", "اليوم"), ("/products", "المنتجات"), ("/segments", "الفئات"), ("/sources", "المصادر"), ("/companies", "الشركات"), ("/imports", "الاستيراد"), ("/settings", "الإعدادات")] %}
+      {% for href, text in items %}
+        <a href="{{ href }}" {% if (href == "/" and request_path == "/") or (href != "/" and request_path.startswith(href)) %}aria-current="page"{% endif %}>{{ text }}</a>
+      {% endfor %}
+    </nav>
+    <div class="who">
+      <span>{{ principal.display_name }} · {{ label("role", principal.role) }}</span>
+      <form method="post" action="/logout">
+        <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+        <button class="btn btn-quiet" type="submit">خروج</button>
+      </form>
+    </div>
+    {% endif %}
+  </header>
+  <main id="main" class="page">
+    {% if flash %}<p class="notice notice-ok" role="status">{{ flash }}</p>{% endif %}
+    {% if error %}
+    <div class="notice notice-bad" role="alert">
+      <p>{{ error.message }}</p>
+      {% if error.problems %}<ul>{% for pr in error.problems %}<li>{{ pr }}</li>{% endfor %}</ul>{% endif %}
+      {% if error.fields %}<ul>{% for f, m in error.fields.items() %}<li><bdi>{{ f }}</bdi>: {{ m }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

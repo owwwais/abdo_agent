@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}الدخول{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <h1>الدخول</h1>
+  <p class="lead">النظام داخلي للمؤسسين. التسجيل العام معطل.</p>
+  {% set messages = {"invalid_credentials": "البريد أو كلمة المرور غير صحيحة.", "no_active_membership": "لا توجد عضوية فعالة لهذا الحساب.", "auth_unavailable": "خدمة الدخول غير متاحة حاليًا.", "auth_not_configured": "الدخول عبر Supabase غير مهيأ في هذه البيئة.", "unauthenticated": "رمز الدخول غير صالح أو منتهي.", "unsupported_jwt_alg": "المشروع يستخدم توقيعًا غير مقبول؛ فعّل مفاتيح التوقيع غير المتماثلة."} %}
+  {% if error %}<p class="notice notice-bad" role="alert">{{ messages.get(error, "تعذر الدخول.") }}</p>{% endif %}
+
+  {% if supabase_enabled %}
+  <form class="stack" method="post" action="/login">
+    <input type="hidden" name="login_csrf" value="{{ login_csrf }}">
+    <div class="field">
+      <label for="email">البريد الإلكتروني</label>
+      <input id="email" name="email" type="email" class="ltr" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="password">كلمة المرور</label>
+      <input id="password" name="password" type="password" class="ltr" autocomplete="current-password" required>
+    </div>
+    <button class="btn" type="submit">دخول</button>
+  </form>
+  {% else %}
+  <p class="notice notice-info">الدخول عبر Supabase Auth غير مهيأ هنا. اضبط SUPABASE_URL وSUPABASE_PUBLISHABLE_KEY.</p>
+  {% endif %}
+
+  {% if dev_enabled %}
+  <hr class="sep">
+  <h2>دخول التطوير المحلي</h2>
+  <p class="hint">fixture للتطوير فقط: يعمل في البيئات المحلية ومن هذا الجهاز فقط، ويمنع التطبيق الإقلاع إن فُعّل في staging أو production.</p>
+  <div class="actions">
+    {% for key, user in dev_users.items() %}
+    <form method="post" action="/auth/dev-login">
+      <input type="hidden" name="login_csrf" value="{{ login_csrf }}">
+      <input type="hidden" name="user" value="{{ key }}">
+      <button class="btn btn-secondary" type="submit">{{ user.display_name }}</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

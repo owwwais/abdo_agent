@@ -1,0 +1,73 @@
+# Blueprint مقترح لـRender. النشر التلقائي معطل (autoDeployTrigger: off) حتى تُضبط الأسرار والحسابات
+# ويُمنح تفويض صريح. الأسرار (sync: false) تُدخل مرة واحدة في مجموعة المتغيرات من لوحة Render ولا تُكتب هنا.
+# قاعدة البيانات: Supabase PostgreSQL؛ انظر docs/decisions/0002 وdocs/runbooks/deploy.md.
+envVarGroups:
+  - name: sales-agent-shared
+    envVars:
+      - key: APP_ENV
+        value: staging
+      - key: APP_TIMEZONE
+        value: Asia/Riyadh
+      - key: APP_BASE_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: CHECKPOINT_DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: DATA_HASH_KEY
+        sync: false
+      - key: DEV_AUTH_ENABLED
+        value: "false"
+      - key: SEARCH_PROVIDER
+        value: fake
+      - key: MODEL_PROVIDER
+        value: fake
+      - key: MAIL_PROVIDER
+        value: fake
+      - key: OUTBOUND_ENABLED
+        value: "false"
+      - key: DAILY_BUDGET_AMOUNT
+        sync: false
+      - key: MONTHLY_BUDGET_AMOUNT
+        sync: false
+      - key: BUDGET_CURRENCY
+        value: USD
+
+services:
+  - type: web
+    name: sales-agent-web
+    runtime: docker
+    region: frankfurt
+    plan: starter
+    autoDeployTrigger: "off"
+    healthCheckPath: /health/ready
+    preDeployCommand: alembic upgrade head
+    envVars:
+      - fromGroup: sales-agent-shared
+
+  - type: worker
+    name: sales-agent-worker
+    runtime: docker
+    region: frankfurt
+    plan: starter
+    autoDeployTrigger: "off"
+    dockerCommand: python -m app.jobs.worker
+    envVars:
+      - fromGroup: sales-agent-shared
+
+  - type: cron
+    name: sales-agent-enqueue-due
+    runtime: docker
+    region: frankfurt
+    plan: starter
+    autoDeployTrigger: "off"
+    schedule: "*/15 * * * *"
+    dockerCommand: python scripts/enqueue_due.py
+    envVars:
+      - fromGroup: sales-agent-shared

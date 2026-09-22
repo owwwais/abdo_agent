@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}دفعة استيراد{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ batch.filename or "إدخال يدوي" }}</h1>
+    <p class="lead"><span class="badge tone-{{ tone(batch.status) }}">{{ label("batch", batch.status) }}</span> · المصدر: {{ source.name if source else "—" }} · {{ batch.row_count }} صف · {{ batch.created_at | dt }}</p>
+  </div>
+</div>
+{% set counts = batch.summary.get("committed_counts") or batch.summary.get("counts") or {} %}
+<section class="card">
+  <h2>{{ "النتيجة" if batch.status == "committed" else "المعاينة" }}</h2>
+  <ul class="plain">
+    {% for action, n in counts.items() %}<li>{{ label("import_action", action) }}: {{ n }}</li>{% endfor %}
+  </ul>
+  {% if batch.summary.get("ignored_columns") %}<p class="hint">أعمدة غير معروفة تجاهلناها: {% for c in batch.summary.ignored_columns %}<bdi>{{ c }}</bdi>{% if not loop.last %}، {% endif %}{% endfor %}</p>{% endif %}
+  {% if batch.status == "preview" %}
+  <p class="hint">الاعتماد يعيد المطابقة مع البيانات الحالية. الصفوف ذات الأخطاء لا تُطبق، وتُحذف بيانات الصفوف بعد الاعتماد أو الإلغاء.</p>
+  <div class="actions">
+    <form method="post" action="/imports/{{ batch.id }}/commit">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <button class="btn" type="submit">اعتماد الصفوف الصالحة</button>
+    </form>
+    <form method="post" action="/imports/{{ batch.id }}/cancel">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <button class="btn btn-secondary" type="submit">إلغاء الدفعة</button>
+    </form>
+  </div>
+  {% endif %}
+</section>
+<section class="card table-wrap">
+  <table class="responsive">
+    <thead><tr><th>الصف</th><th>الاسم</th><th>الإجراء</th><th>التفاصيل</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr>
+      <td data-label="الصف">{{ r.row_number }}</td>
+      <td data-label="الاسم">{% if r.result_company_id %}<a href="/companies/{{ r.result_company_id }}">{{ r.display_name or "—" }}</a>{% else %}{{ r.display_name or "—" }}{% endif %}</td>
+      <td data-label="الإجراء"><span class="badge tone-{{ 'bad' if r.action.startswith('skip') else ('warn' if r.action == 'review' else 'ok') }}">{{ label("import_action", r.action) }}</span></td>
+      <td data-label="التفاصيل" class="small">
+        {% for e in r.errors %}<div>{{ e.message }}</div>{% endfor %}
+        {% if r.match.get("reason") %}<div class="muted">{{ r.match.reason }}</div>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

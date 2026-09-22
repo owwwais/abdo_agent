@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}مصدر جديد{% endblock %}
+{% block content %}
+<h1>مصدر جديد</h1>
+<p class="lead">لا نفترض API عامًا لمنصة لم تُفحص، ولا نسجل الدخول آليًا ولا نتجاوز CAPTCHA.</p>
+<section class="card">
+  <form class="stack" method="post" action="/sources">
+    <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+    <div class="field">
+      <label for="name">اسم المصدر</label>
+      <input id="name" name="name" type="text" required maxlength="200" value="{{ form.get('name', '') if form else '' }}">
+    </div>
+    <div class="field">
+      <label for="kind">النوع</label>
+      {% set chosen_kind = form.get('kind', 'html') if form else 'html' %}
+      <select id="kind" name="kind">
+        {% for key, spec in kinds.items() %}
+        <option value="{{ key }}" {% if chosen_kind == key %}selected{% endif %}>{{ spec.label }}</option>
+        {% endfor %}
+      </select>
+      <ul class="hint">
+        {% for key, spec in kinds.items() %}<li><strong>{{ spec.label }}:</strong> {{ spec.help }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% set source = None %}
+    {% set linked_ids = [] %}
+    {% include "_source_fields.html" %}
+    <div class="actions"><button class="btn" type="submit">إنشاء المصدر</button></div>
+  </form>
+</section>
+{% endblock %}

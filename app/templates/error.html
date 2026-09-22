@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}خطأ{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{% if error.status_code == 404 %}غير موجود{% elif error.status_code == 403 %}غير مسموح{% else %}تعذر تنفيذ الطلب{% endif %}</h1>
+  <p>{{ error.message }}</p>
+  <p class="hint">رمز الخطأ: <bdi dir="ltr">{{ error.code }}</bdi></p>
+  <p><a href="/">العودة إلى اليوم</a></p>
+</div>
+{% endblock %}

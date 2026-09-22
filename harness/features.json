@@ -1,0 +1,278 @@
+{
+  "updated": "2026-09-22",
+  "status_values": ["pending", "in_progress", "blocked", "verified"],
+  "note": "verified = اجتاز فحصًا مسجلًا محليًا. live_verification منفصل: التحقق مع مزود حقيقي.",
+  "features": [
+    {
+      "id": "F-001",
+      "milestone": "M0",
+      "title": "بنية المشروع والتشغيل المحلي وملفات الـHarness",
+      "depends_on": [],
+      "status": "verified",
+      "acceptance": [
+        "checkout جديد يتبع README ويعمل",
+        "قاعدة جديدة تطبق ترحيلاتها",
+        "ملفات harness و.env.example وDockerfile وrender.yaml موجودة دون أسرار"
+      ],
+      "evidence": [
+        "tests/conftest.py::migrated_db يحذف المخطط ويطبق كل الترحيلات من الصفر في كل تشغيل",
+        "tests/integration/test_migrations.py (لا انحراف بين النماذج والترحيلات، RLS على كل الجداول)",
+        "alembic upgrade → downgrade base → upgrade: نجح على قاعدة التطوير",
+        "نسخة git clone جديدة: uv sync --frozen ثم pytest (انظر docs/verification/m0-m1.md)"
+      ],
+      "live_verification": "لم يُبنَ Docker image ولم يُنشر (لا Docker على جهاز التطوير، والنشر يحتاج تفويضًا)",
+      "blocked_by": null
+    },
+    {
+      "id": "F-002",
+      "milestone": "M0",
+      "title": "الهوية والعضويات والجلسات وعزل الـworkspace",
+      "depends_on": ["F-001"],
+      "status": "verified",
+      "acceptance": [
+        "زائر لا يصل للبيانات",
+        "مستخدم workspace آخر يفشل في القراءة والتعديل",
+        "Local auth fixture للتطوير فقط، ويمنع الإقلاع الإنتاجي إذا فُعّل",
+        "تسجيل هوية صاحب كل قرار وتوقيته"
+      ],
+      "evidence": [
+        "tests/integration/test_auth.py (زائر، CSRF، Origin، أدوار، تعطيل العضوية، الخروج، fixture محلي فقط)",
+        "tests/integration/test_isolation.py (T19 عبر API وHTML وعلى مستوى القاعدة بمفاتيح مركبة)",
+        "tests/unit/test_config.py (رفض DEV_AUTH_ENABLED والأسرار التطويرية خارج البيئات المحلية)",
+        "tests/unit/test_supabase_auth.py (ES256 وJWKS محاكى: iss/aud/exp/kid ورفض HS256)",
+        "tests/integration/test_products.py::test_product_lifecycle_and_activation_rules (audit_log)"
+      ],
+      "live_verification": "blocked: لا مشروع Supabase بعد؛ الدخول الحقيقي بكلمة المرور وJWKS الحقيقي غير مجربين",
+      "blocked_by": null
+    },
+    {
+      "id": "F-003",
+      "milestone": "M1",
+      "title": "CRUD المنتجات والفئات المستهدفة",
+      "depends_on": ["F-002"],
+      "status": "verified",
+      "acceptance": [
+        "إضافة منتج وفئة دون تعديل كود",
+        "لا ينشط منتج بلا وصف مشكلة وفئة وخصائص معتمدة",
+        "تعديل بإصدار قديم يعيد 409، ومدخل غير صالح 422 برسالة عربية",
+        "إضافة منتج لا تزيد الحصة اليومية"
+      ],
+      "evidence": [
+        "tests/integration/test_products.py (7 اختبارات)",
+        "tests/e2e/test_html_flow.py::test_full_owner_flow_through_forms (عبر نماذج HTML)"
+      ],
+      "notes": "زر «اختبار الفهم» مفصول إلى F-019 لأنه يعتمد على ModelGateway. الحصة ما زالت إعدادًا ثابتًا؛ فرضها ذريًا في F-006/F-014.",
+      "blocked_by": null
+    },
+    {
+      "id": "F-004",
+      "milestone": "M1",
+      "title": "إعداد المصادر واختبار العينة والتفعيل",
+      "depends_on": ["F-002"],
+      "status": "verified",
+      "acceptance": [
+        "المصدر يبدأ غير نشط؛ لا تفعيل صامت (T02)",
+        "عينة توضح الحقول الناجحة والناقصة والتكلفة",
+        "رابط داخلي ممنوع قبل الاتصال، وتحويل لعنوان خاص يُرفض (T04)",
+        "بوابة تتطلب وصولًا غير متاح → needs_setup/restricted مع سبب دون بيانات مختلقة (T03)",
+        "محتوى الصفحة غير موثوق ولا يغير الصلاحيات (T05)",
+        "تغيير الإعداد يلغي التفعيل ويتطلب فحصًا وتأكيدًا جديدين"
+      ],
+      "evidence": [
+        "tests/integration/test_sources.py (11 اختبارًا)",
+        "tests/unit/test_netguard.py و tests/unit/test_fetch.py (SSRF، DNS rebinding، الحجم بعد فك الضغط، التحويلات)",
+        "tests/integration/test_jobs.py (الطابور الذي ينفذ الفحص)"
+      ],
+      "live_verification": "لم يُجرب الجلب على موقع حقيقي؛ كل الشبكة اصطناعية في الاختبارات. مزود البحث الحقيقي وGoogle Maps غير منفذين (needs_setup).",
+      "blocked_by": null
+    },
+    {
+      "id": "F-005",
+      "milestone": "M1",
+      "title": "الإدخال اليدوي واستيراد CSV وإزالة التكرار",
+      "depends_on": ["F-004"],
+      "status": "verified",
+      "acceptance": [
+        "CSV يعرض أخطاء الصفوف دون إسقاط الملف كله",
+        "تطابق مبهم لا يدمج شركتين تلقائيًا (T07)",
+        "الشركة في مصدرين كيان واحد عند تحقق المعرف، مع مصدرين (T06)",
+        "الاعتماد idempotent وبيانات الصفوف الخام تُحذف بعده",
+        "سجل منع التواصل يمنع إعادة الإدخال"
+      ],
+      "evidence": [
+        "tests/integration/test_imports.py (12 اختبارًا)",
+        "tests/unit/test_normalize.py (تطبيع عربي، منصات متعددة المستأجرين، هاتف، بريد، CSV)",
+        "tests/e2e/test_html_flow.py (إدخال يدوي وCSV عبر الواجهة)"
+      ],
+      "blocked_by": null
+    },
+    {
+      "id": "F-006",
+      "milestone": "M2",
+      "title": "دورة اكتشاف يومية محدودة",
+      "depends_on": ["F-003", "F-004", "F-005", "F-013"],
+      "status": "pending",
+      "acceptance": [
+        "دورة واحدة يوميًا لكل workspace بمفتاح فريد، دون تعويض أيام فائتة",
+        "اختيار منتج وفئة ومصدر نشط بتوزيع مرجح يمنع التجويع، مع سبب الاختيار",
+        "skipped_configuration دون استدعاء نموذج عند غياب منتج أو مصدر صالح",
+        "حدود: 3 استعلامات و20 مرشحًا؛ fixtures تنتج النتائج المتوقعة",
+        "discover() في موصلات html وfake_search",
+        "شاشة قرار الدمج/الفصل لمرشحي التكرار"
+      ],
+      "evidence": [],
+      "blocked_by": null
+    },
+    {
+      "id": "F-007",
+      "milestone": "M2",
+      "title": "التأهيل والأدلة والمسودة (LangGraph + ModelGateway)",
+      "depends_on": ["F-006"],
+      "status": "pending",
+      "acceptance": [
+        "ModelGateway بأدوار extractor/qualifier_writer وFakeModel أولًا",
+        "الأدلة مربوطة ومسموح استعمالها؛ الدرجة محسوبة برمجيًا",
+        "لا خصائص أو أسعار مختلقة في المسودة (T08)",
+        "PostgreSQL checkpointer واستئناف بنفس thread (T09)"
+      ],
+      "evidence": [],
+      "blocked_by": null
+    },
+    {
+      "id": "F-008",
+      "milestone": "M3",
+      "title": "موافقة مرتبطة بإصدار مسودة لا تنفذ مرتين",
+      "depends_on": ["F-002", "F-007"],
+      "status": "pending",
+      "acceptance": [
+        "طلبان متزامنان للموافقة ينشئان أمر إرسال واحدًا",
+        "تعديل المستلم يلغي الموافقة السابقة",
+        "حساب غير مخول لا يستطيع الاعتماد"
+      ],
+      "evidence": [],
+      "blocked_by": null
+    },
+    {
+      "id": "F-009",
+      "milestone": "M3",
+      "title": "بوت تيليجرام آمن وبطاقات اعتماد",
+      "depends_on": ["F-008"],
+      "status": "pending",
+      "acceptance": [
+        "تحقق السر والمجموعة والعضو ومنع تكرار update_id",
+        "الاعتماد من البوت يمر بخدمة الاعتماد نفسها",
+        "callback opaque محدود العمر"
+      ],
+      "evidence": [],
+      "blocked_by": "حساب بوت ومجموعة تيليجرام للاختبار الحي"
+    },
+    {
+      "id": "F-010",
+      "milestone": "M4",
+      "title": "أوامر إرسال البريد idempotent ومصالحة unknown_delivery",
+      "depends_on": ["F-008"],
+      "status": "pending",
+      "acceptance": ["timeout بعد إرسال مؤكد يدخل unknown_delivery ولا يعيد إرسالًا أعمى (T13)"],
+      "evidence": [],
+      "blocked_by": "قرار مزود البريد (SPEC §17)"
+    },
+    {
+      "id": "F-011",
+      "milestone": "M4",
+      "title": "البريد الوارد والربط والتصنيف والرد",
+      "depends_on": ["F-010"],
+      "status": "pending",
+      "acceptance": ["تكرار webhook لا يكرر التحليل (T14)", "رد غامض → needs_linking (T15)", "إلغاء التواصل → suppression فوري (T16)"],
+      "evidence": [],
+      "blocked_by": "قرار مزود البريد (SPEC §17)"
+    },
+    {
+      "id": "F-012",
+      "milestone": "M4",
+      "title": "واتساب يدوي",
+      "depends_on": ["F-008"],
+      "status": "pending",
+      "acceptance": ["النسخ لا يغير الحالة إلى sent؛ تأكيد المؤسس يُسجل مع الوقت"],
+      "evidence": [],
+      "blocked_by": null
+    },
+    {
+      "id": "F-013",
+      "milestone": "M5",
+      "title": "المجدول والحجوزات والاسترداد",
+      "depends_on": ["F-001"],
+      "status": "pending",
+      "acceptance": [
+        "عاملان لا ينفذان فرصتين معًا لنفس workspace",
+        "فقد lease يمنع commit متأخرًا (T18) — الأساس منفذ ومختبر في test_jobs.py",
+        "reboot يستعيد العمل المسموح دون تعويض أيام متراكمة"
+      ],
+      "evidence": ["جزئي: tests/integration/test_jobs.py (claim SKIP LOCKED، fencing، reaper، backoff)"],
+      "blocked_by": null
+    },
+    {
+      "id": "F-014",
+      "milestone": "M5",
+      "title": "الميزانيات والحصص الذرية",
+      "depends_on": ["F-013"],
+      "status": "pending",
+      "acceptance": ["سقف المال يمنع الطلب قبل التنفيذ", "سباق الحصة لا يتجاوز الحدود (T17)"],
+      "evidence": [],
+      "blocked_by": "الميزانيات النقدية يحددها المالك (مطلوبة لـlive فقط)"
+    },
+    {
+      "id": "F-015",
+      "milestone": "M5",
+      "title": "الملخص اليومي والصحة والإيقاف",
+      "depends_on": ["F-013"],
+      "status": "pending",
+      "acceptance": ["الملخص لا يرسل مرتين", "pause_* يمنع الأثر الخارجي ويبقي استقبال الأحداث"],
+      "evidence": [],
+      "blocked_by": null
+    },
+    {
+      "id": "F-016",
+      "milestone": "M6",
+      "title": "E2E المتصفح والواجهة العربية",
+      "depends_on": ["F-003", "F-004", "F-005"],
+      "status": "pending",
+      "acceptance": ["Playwright على 390px و1440px ولوحة المفاتيح (T20)", "لقطات شاشة"],
+      "evidence": ["تمهيدي: tests/e2e/test_html_flow.py عبر نماذج HTML دون متصفح؛ فحص بصري يدوي في المتصفح"],
+      "blocked_by": null
+    },
+    {
+      "id": "F-017",
+      "milestone": "M6",
+      "title": "تقييم النماذج",
+      "depends_on": ["F-007"],
+      "status": "pending",
+      "acceptance": ["30 حالة اصطناعية بتسميات بشرية منفصلة", "JSON صالح ≥95% بعد محاولة تصحيح"],
+      "evidence": [],
+      "blocked_by": "مفاتيح مزود نموذج وميزانية"
+    },
+    {
+      "id": "F-018",
+      "milestone": "M6",
+      "title": "النشر والـrunbooks والنسخ الاحتياطي والاسترجاع",
+      "depends_on": ["F-001"],
+      "status": "pending",
+      "acceptance": ["smoke test في بيئة تجريبية عند التفويض", "نسخة احتياطية واختبار استرجاع معزول", "خطوات العودة لإصدار سابق"],
+      "evidence": ["مسودة: render.yaml (autoDeployTrigger off)، Dockerfile، docs/runbooks/deploy.md"],
+      "blocked_by": "حسابات Render/Supabase وتفويض النشر"
+    },
+    {
+      "id": "F-019",
+      "milestone": "M2",
+      "title": "اختبار فهم المنتج دون إرسال",
+      "depends_on": ["F-003", "F-007"],
+      "status": "pending",
+      "acceptance": [
+        "يعرض ما فهمه النموذج ومثالًا مناسبًا وآخر مستبعدًا والأسئلة الناقصة",
+        "يحسب ضمن الميزانية ولا يرسل رسائل"
+      ],
+      "evidence": [],
+      "notes": "فُصلت من F-003 (SPEC §4.3) لأنها تعتمد على ModelGateway؛ لم يُحذف أي معيار.",
+      "blocked_by": null
+    }
+  ]
+}

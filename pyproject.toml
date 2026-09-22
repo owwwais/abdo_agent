@@ -1,0 +1,73 @@
+[project]
+name = "sales-agent"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.20.0",
+    "beautifulsoup4>=4.15.0",
+    "defusedxml>=0.7.1",
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "jinja2>=3.1.6",
+    "phonenumbers>=9.0.39",
+    "psycopg[binary]>=3.3.6",
+    "pydantic>=2",
+    "pydantic-settings>=2.15.0",
+    "pyjwt[crypto]>=2.14.0",
+    "python-multipart>=0.0.32",
+    "sqlalchemy[asyncio]>=2",
+    "uvicorn[standard]>=0.53.0",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pgserver>=0.1.4",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = [
+    "live: يحتاج مزودًا خارجيًا حقيقيًا ومفاتيح وميزانية؛ لا يعمل في الفحوص اليومية",
+]
+addopts = "-m 'not live' -p no:cacheprovider"
+filterwarnings = ["error::pytest.PytestUnraisableExceptionWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "RUF"]
+ignore = [
+    "RUF001", "RUF002", "RUF003",  # Arabic text contains characters ruff flags as ambiguous
+    "S101",                        # assert is fine in tests and invariants
+    "B008",                        # FastAPI Depends() defaults
+    "E501",                        # ruff format owns wrapping; long Arabic strings stay readable
+    "RUF012",                      # pydantic/SQLAlchemy class attributes copy their defaults safely
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S311"]
+"scripts/**" = ["S603", "S607"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+strict_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+exclude = ["migrations/", "tests/"]

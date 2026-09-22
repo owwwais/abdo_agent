@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ company.display_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ company.display_name }}</h1>
+    <p class="lead"><span class="badge tone-{{ tone(company.status) }}">{{ label("company", company.status) }}</span>{% if company.is_demo_data %} <span class="badge tone-muted">demo</span>{% endif %}</p>
+  </div>
+</div>
+{% if duplicates %}
+<section class="card">
+  <h2>تكرار محتمل يحتاج مراجعة</h2>
+  <p class="hint">لم تُدمج تلقائيًا لأن التطابق ضعيف (اسم أو هاتف مشترك قد يخص فرعًا آخر).</p>
+  <ul class="plain">
+    {% for d, name in duplicates %}
+    <li><a href="/companies/{{ d.candidate_company_id }}">{{ name }}</a> — {{ d.reasons|join("، ") }} <span class="badge tone-{{ tone('needs_review' if d.status == 'open' else 'active') }}">{{ "مفتوحة" if d.status == "open" else d.status }}</span></li>
+    {% endfor %}
+  </ul>
+  <p class="hint">قرار الدمج أو الفصل يُبنى مع شاشة الفرص (F-006).</p>
+</section>
+{% endif %}
+<div class="grid">
+  <section class="card">
+    <h2>البيانات</h2>
+    <dl class="kv">
+      <dt>النطاق</dt><dd>{% if company.domain %}<bdi dir="ltr">{{ company.domain }}</bdi>{% else %}—{% endif %}</dd>
+      <dt>النشاط</dt><dd>{{ company.sector or "—" }}</dd>
+      <dt>الفئة</dt><dd>{{ segment.name if segment else "—" }}</dd>
+      <dt>المنطقة/المدينة</dt><dd>{{ company.region or "—" }} / {{ company.city or "—" }}</dd>
+      <dt>الدولة</dt><dd>{{ company.country or "—" }}</dd>
+      <dt>ملاحظات</dt><dd>{{ company.notes or "—" }}</dd>
+    </dl>
+  </section>
+  <section class="card">
+    <h2>المعرفات</h2>
+    <ul class="plain">
+      {% for i in identifiers %}<li>{{ label("identifier", i.kind) }}: <bdi dir="ltr">{{ i.normalized_value }}</bdi></li>{% else %}<li class="muted">لا معرفات</li>{% endfor %}
+    </ul>
+  </section>
+</div>
+<section class="card">
+  <h2>جهات الاتصال</h2>
+  <p class="hint">أهلية التواصل غير معروفة افتراضيًا، والإرسال ممنوع حتى تُوثق.</p>
+  <div class="table-wrap">
+    <table class="responsive">
+      <thead><tr><th>القناة</th><th>القيمة</th><th>الاسم المهني</th><th>الصيغة</th><th>أهلية التواصل</th></tr></thead>
+      <tbody>
+      {% for ct, masked in contacts %}
+      <tr>
+        <td data-label="القناة">{{ label("channel", ct.channel) }}</td>
+        <td data-label="القيمة"><bdi dir="ltr">{{ masked }}</bdi></td>
+        <td data-label="الاسم">{{ ct.professional_name or "—" }}{% if ct.role_title %} · {{ ct.role_title }}{% endif %}</td>
+        <td data-label="الصيغة">{{ "مطبعة" if ct.normalized else "غير مؤكدة" }}</td>
+        <td data-label="الأهلية"><span class="badge tone-warn">غير معروفة</span></td>
+      </tr>
+      {% else %}<tr><td colspan="5" class="muted">لا توجد جهات اتصال.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<section class="card">
+  <h2>المصادر</h2>
+  <ul class="plain">
+    {% for link, source_name in links %}
+    <li>{{ source_name }} · {{ link.first_seen_at | dt }}{% if link.url %} · <bdi dir="ltr">{{ link.url }}</bdi>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

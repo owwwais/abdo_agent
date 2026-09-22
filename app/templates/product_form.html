@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name if product else "منتج جديد" }}{% endblock %}
+{% macro fv(name, fallback) %}{{ form.get(name, '') if form else fallback }}{% endmacro %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ product.name if product else "منتج جديد" }}</h1>
+    {% if product %}
+    <p class="lead">
+      <span class="badge tone-{{ tone(product.status) }}">{{ label("product", product.status) }}</span>
+      · إصدار الوصف {{ product.version }} · آخر تعديل {{ product.updated_at | dt }}
+    </p>
+    {% else %}
+    <p class="lead">يُنشأ المنتج كمسودة. التفعيل خطوة منفصلة بعد اكتمال الوصف.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% if product and principal.is_owner %}
+<section class="card">
+  <h2>الحالة</h2>
+  {% if problems and product.status != "active" %}
+  <div class="notice notice-warn"><p>قبل التفعيل:</p><ul>{% for pr in problems %}<li>{{ pr }}</li>{% endfor %}</ul></div>
+  {% endif %}
+  {% set transitions = {"draft": [("active", "تفعيل"), ("archived", "أرشفة")], "active": [("paused", "إيقاف مؤقت"), ("archived", "أرشفة")], "paused": [("active", "إعادة التفعيل"), ("draft", "إعادة إلى مسودة"), ("archived", "أرشفة")], "archived": [("draft", "استعادة كمسودة")]} %}
+  <div class="actions">
+    {% for target, text in transitions[product.status] %}
+    <form method="post" action="/products/{{ product.id }}/status">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <input type="hidden" name="version" value="{{ product.version }}">
+      <input type="hidden" name="status" value="{{ target }}">
+      <button class="btn {{ 'btn-secondary' if target != 'active' else '' }}" type="submit" {% if target == "active" and problems %}disabled aria-disabled="true"{% endif %}>{{ text }}</button>
+    </form>
+    {% endfor %}
+  </div>
+  <p class="hint">اختبار فهم المنتج بالنموذج اللغوي يُبنى مع طبقة النماذج (F-019)؛ لا يوجد زر له قبل ذلك.</p>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>وصف المنتج</h2>
+  {% if principal.is_owner %}
+  <form class="stack" method="post" action="{{ '/products/' ~ product.id if product else '/products' }}">
+    <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+    {% if product %}<input type="hidden" name="version" value="{{ product.version }}">{% endif %}
+    <div class="field">
+      <label for="name">الاسم</label>
+      <input id="name" name="name" type="text" required maxlength="200" value="{{ fv('name', product.name if product else '') }}">
+    </div>
+    <div class="field">
+      <label for="summary">وصف مختصر</label>
+      <textarea id="summary" name="summary" maxlength="1000">{{ fv('summary', product.summary if product else '') }}</textarea>
+    </div>
+    <div class="field">
+      <label for="problem">المشكلة التي يعالجها</label>
+      <textarea id="problem" name="problem" maxlength="3000">{{ fv('problem', product.problem if product else '') }}</textarea>
+      <span class="hint">مطلوب للتفعيل. اكتب المشكلة كما يعيشها العميل، دون وعود أو أرقام غير مثبتة.</span>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="capabilities">الخصائص المتاحة</label>
+        <textarea id="capabilities" name="capabilities">{{ fv('capabilities', product.capabilities|join("\n") if product else '') }}</textarea>
+        <span class="hint">سطر لكل خاصية معتمدة. الرسائل لا تذكر غيرها.</span>
+      </div>
+      <div class="field">
+        <label for="unavailable_capabilities">خصائص غير متاحة</label>
+        <textarea id="unavailable_capabilities" name="unavailable_capabilities">{{ fv('unavailable_capabilities', product.unavailable_capabilities|join("\n") if product else '') }}</textarea>
+        <span class="hint">ما لا يجوز الوعد به.</span>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="fit_signals">مؤشرات الملاءمة</label>
+        <textarea id="fit_signals" name="fit_signals">{{ fv('fit_signals', product.fit_signals|join("\n") if product else '') }}</textarea>
+      </div>
+      <div class="field">
+        <label for="exclusions">حالات الاستبعاد</label>
+        <textarea id="exclusions" name="exclusions">{{ fv('exclusions', product.exclusions|join("\n") if product else '') }}</textarea>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="product_url">رابط المنتج</label>
+        <input id="product_url" name="product_url" type="url" class="ltr" value="{{ fv('product_url', product.product_url or '' if product else '') }}">
+      </div>
+      <div class="field">
+        <label for="demo_url">رابط التجربة</label>
+        <input id="demo_url" name="demo_url" type="url" class="ltr" value="{{ fv('demo_url', product.demo_url or '' if product else '') }}">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="price_status">حالة السعر</label>
+        {% set ps = fv('price_status', product.price_status if product else 'needs_review') | trim %}
+        <select id="price_status" name="price_status">
+          <option value="needs_review" {% if ps == "needs_review" %}selected{% endif %}>يحتاج مراجعة</option>
+          <option value="approved" {% if ps == "approved" %}selected{% endif %}>معتمد</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="priority">الأولوية</label>
+        {% set pr = fv('priority', product.priority if product else 3) | trim %}
+        <select id="priority" name="priority">
+          {% for i in range(1, 6) %}<option value="{{ i }}" {% if pr == i|string %}selected{% endif %}>{{ i }}{% if i == 5 %} (الأعلى){% elif i == 1 %} (الأدنى){% endif %}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="price_text">نص السعر المعتمد</label>
+      <input id="price_text" name="price_text" type="text" maxlength="1000" value="{{ fv('price_text', product.price_text if product else '') }}">
+      <span class="hint">اتركه فارغًا مع «يحتاج مراجعة»؛ الرسائل لا تذكر سعرًا غير معتمد.</span>
+    </div>
+    <fieldset>
+      <legend>الفئات المستهدفة</legend>
+      {% set chosen = form.getlist('segment_ids') if form else linked_ids %}
+      <div class="checks">
+        {% for s in segments %}
+        <label class="check"><input type="checkbox" name="segment_ids" value="{{ s.id }}" {% if s.id|string in chosen %}checked{% endif %}> <span>{{ s.name }}</span></label>
+        {% else %}
+        <p class="muted">لا توجد فئات نشطة. <a href="/segments">أضف فئة</a>.</p>
+        {% endfor %}
+      </div>
+      <div class="field">
+        <label for="regions">المناطق</label>
+        <input id="regions" name="regions" type="text" value="{{ fv('regions', regions) }}">
+        <span class="hint">مفصولة بفواصل، مثل: الرياض، جدة. تُطبق على الفئات المختارة.</span>
+      </div>
+    </fieldset>
+    <div class="actions"><button class="btn" type="submit">{{ "حفظ التعديلات" if product else "إنشاء المنتج" }}</button></div>
+  </form>
+  {% else %}
+  <dl class="kv">
+    <dt>المشكلة</dt><dd>{{ product.problem or "—" }}</dd>
+    <dt>الخصائص</dt><dd>{{ product.capabilities|join("، ") or "—" }}</dd>
+    <dt>غير متاح</dt><dd>{{ product.unavailable_capabilities|join("، ") or "—" }}</dd>
+    <dt>السعر</dt><dd>{{ label("price", product.price_status) }} {{ product.price_text }}</dd>
+  </dl>
+  <p class="hint">التعديل للمالك فقط.</p>
+  {% endif %}
+</section>
+{% endblock %}

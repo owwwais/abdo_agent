@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}الإعدادات والتشغيل{% endblock %}
+{% block content %}
+<h1>الإعدادات والتشغيل</h1>
+<p class="lead">{{ workspace.name }} · المنطقة الزمنية <bdi dir="ltr">{{ workspace.timezone }}</bdi> · بيئة <bdi dir="ltr">{{ env }}</bdi></p>
+
+<section class="card">
+  <h2>التكاملات</h2>
+  <div class="table-wrap">
+    <table class="responsive">
+      <thead><tr><th>التكامل</th><th>الحالة</th><th>ملاحظة</th></tr></thead>
+      <tbody>
+      {% for name, state, note in integrations %}
+      <tr><td data-label="التكامل">{{ name }}</td><td data-label="الحالة">{{ state }}</td><td data-label="ملاحظة" class="muted small">{{ note }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">الأسرار تُضبط في إدارة أسرار الاستضافة أو ملف ‎.env‎ المحلي، ولا تُدخل في هذه الواجهة.</p>
+</section>
+
+<section class="card">
+  <h2>الأعضاء</h2>
+  <ul class="plain">
+    {% for m, u in members %}
+    <li>{{ u.display_name }} · <bdi dir="ltr">{{ u.email }}</bdi> · {{ label("role", m.role) }} · {{ "فعالة" if m.status == "active" else "معطلة" }}{% if u.is_dev_fixture %} <span class="badge tone-muted">fixture تطوير</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  <p class="hint">إضافة الأعضاء حاليًا عبر سكربت (docs/runbooks/members.md)؛ شاشة إدارة الأعضاء لاحقًا.</p>
+</section>
+
+<section class="card">
+  <h2>العامل والمهام</h2>
+  <ul class="plain">
+    {% for w in workers %}
+    <li><bdi dir="ltr">{{ w.worker_id }}</bdi> · آخر نبضة {{ w.last_seen_at | dt }}{% if w.stopped_at %} · <span class="badge tone-muted">متوقف</span>{% elif (now - w.last_seen_at).total_seconds() > 120 %} · <span class="badge tone-bad">لا نبض</span>{% else %} · <span class="badge tone-ok">يعمل</span>{% endif %}</li>
+    {% else %}<li class="muted">لم يعمل أي عامل بعد.</li>{% endfor %}
+  </ul>
+  {% if failed_jobs %}
+  <h3>مهام فشلت</h3>
+  <ul>{% for j in failed_jobs %}<li><bdi dir="ltr">{{ j.kind }}</bdi> · {{ j.updated_at | dt }} · {{ j.last_error or "" }}</li>{% endfor %}</ul>
+  {% endif %}
+</section>
+{% endblock %}

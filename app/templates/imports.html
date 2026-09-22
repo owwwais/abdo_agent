@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}الاستيراد{% endblock %}
+{% macro fv(name) %}{{ form.get(name, '') if form else '' }}{% endmacro %}
+{% block content %}
+<h1>إضافة جهات</h1>
+<p class="lead">مقابلات وإحالات يدوية أو ملف CSV مع معاينة. لا تُدخل بيانات مرضى أو نزلاء أو أفراد خاصين.</p>
+
+{% if not sources %}
+<p class="notice notice-warn">لا يوجد مصدر نشط. الاستيراد يحتاج مصدرًا أكد المالك سياسة استخدامه وتخزينه (مثل «مقابلات وإحالات»). <a href="/sources">راجع المصادر</a>.</p>
+{% else %}
+<div class="grid">
+  <section class="card">
+    <h2>إدخال جهة واحدة</h2>
+    <form class="stack" method="post" action="/imports/manual">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <div class="field">
+        <label for="m-source">المصدر</label>
+        <select id="m-source" name="source_id" required>
+          {% for s in sources %}<option value="{{ s.id }}" {% if form and form.get('source_id') == s.id|string %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field"><label for="m-name">اسم الجهة</label><input id="m-name" name="name" type="text" required maxlength="300" value="{{ fv('name') }}"></div>
+      <div class="row">
+        <div class="field"><label for="m-website">الموقع</label><input id="m-website" name="website" type="text" class="ltr" maxlength="500" value="{{ fv('website') }}"></div>
+        <div class="field"><label for="m-cr">السجل التجاري/الموحد</label><input id="m-cr" name="cr_number" type="text" class="ltr" maxlength="20" value="{{ fv('cr_number') }}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="m-sector">النشاط</label><input id="m-sector" name="sector" type="text" maxlength="200" value="{{ fv('sector') }}"></div>
+        <div class="field">
+          <label for="m-segment">الفئة</label>
+          <select id="m-segment" name="segment"><option value="">—</option>{% for s in segments %}<option value="{{ s.name }}" {% if fv('segment') == s.name %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="m-region">المنطقة</label><input id="m-region" name="region" type="text" maxlength="200" value="{{ fv('region') }}"></div>
+        <div class="field"><label for="m-city">المدينة</label><input id="m-city" name="city" type="text" maxlength="200" value="{{ fv('city') }}"></div>
+        <div class="field"><label for="m-country">الدولة</label><input id="m-country" name="country" type="text" maxlength="60" placeholder="SA" value="{{ fv('country') }}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="m-phone">هاتف العمل</label><input id="m-phone" name="phone" type="text" class="ltr" maxlength="40" value="{{ fv('phone') }}"></div>
+        <div class="field"><label for="m-email">بريد العمل</label><input id="m-email" name="email" type="email" class="ltr" maxlength="320" value="{{ fv('email') }}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="m-contact">اسم المسؤول (مهني)</label><input id="m-contact" name="contact_name" type="text" maxlength="200" value="{{ fv('contact_name') }}"></div>
+        <div class="field"><label for="m-role">المنصب</label><input id="m-role" name="contact_role" type="text" maxlength="200" value="{{ fv('contact_role') }}"></div>
+      </div>
+      <div class="field"><label for="m-ref">رابط المرجع</label><input id="m-ref" name="source_url" type="text" class="ltr" maxlength="2000" value="{{ fv('source_url') }}"></div>
+      <div class="field"><label for="m-notes">ملاحظات</label><textarea id="m-notes" name="notes" maxlength="2000">{{ fv('notes') }}</textarea></div>
+      <div class="actions"><button class="btn" type="submit">تسجيل الجهة</button></div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>استيراد CSV</h2>
+    <form class="stack" method="post" action="/imports/csv" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <div class="field">
+        <label for="c-source">المصدر</label>
+        <select id="c-source" name="source_id" required>{% for s in sources %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
+      </div>
+      <div class="field">
+        <label for="c-file">الملف</label>
+        <input id="c-file" name="file" type="file" accept=".csv,text/csv" required>
+        <span class="hint">UTF-8 (أو Windows-1256)، حتى 2 ميغابايت و2000 صف. تظهر معاينة وأخطاء الصفوف قبل الاعتماد.</span>
+      </div>
+      <div class="actions"><button class="btn" type="submit">معاينة</button></div>
+    </form>
+    <h3>الأعمدة المقبولة</h3>
+    <p class="small">الاسم (مطلوب)، الموقع، السجل التجاري، النشاط، الفئة، المنطقة، المدينة، الدولة، الهاتف، البريد، اسم المسؤول، المنصب، رابط المصدر، ملاحظات. تُقبل الأسماء الإنجليزية أيضًا: <bdi dir="ltr">name, website, cr_number, sector, segment, region, city, country, phone, email, contact_name, contact_role, source_url, notes</bdi>.</p>
+  </section>
+</div>
+{% endif %}
+
+<section class="card">
+  <h2>آخر الدفعات</h2>
+  <div class="table-wrap">
+    <table class="responsive">
+      <thead><tr><th>الدفعة</th><th>النوع</th><th>الحالة</th><th>الصفوف</th><th>أخطاء</th><th>الوقت</th></tr></thead>
+      <tbody>
+      {% for b in batches %}
+      <tr>
+        <td data-label="الدفعة"><a href="/imports/{{ b.id }}">{{ b.filename or "إدخال يدوي" }}</a></td>
+        <td data-label="النوع">{{ "CSV" if b.kind == "csv" else "يدوي" }}</td>
+        <td data-label="الحالة"><span class="badge tone-{{ tone(b.status) }}">{{ label("batch", b.status) }}</span></td>
+        <td data-label="الصفوف">{{ b.row_count }}</td>
+        <td data-label="أخطاء">{{ b.error_count }}</td>
+        <td data-label="الوقت">{{ b.created_at | dt }}</td>
+      </tr>
+      {% else %}<tr><td colspan="6" class="muted">لا توجد دفعات.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

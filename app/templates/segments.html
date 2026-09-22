@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}الفئات المستهدفة{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>الفئات المستهدفة</h1>
+    <p class="lead">فئات إعداد وليست دليلًا على الحاجة. لا يُستنتج من الفئة وحدها أن الجهة تحتاج المنتج.</p>
+  </div>
+</div>
+
+{% for s in segments %}
+<details class="card" {% if edit_id and edit_id|string == s.id|string %}open{% endif %}>
+  <summary>{{ s.name }} <span class="badge tone-{{ tone(s.status) }}">{{ label("segment", s.status) }}</span></summary>
+  {% if s.description %}<p>{{ s.description }}</p>{% endif %}
+  {% if principal.is_owner %}
+  <form class="stack" method="post" action="/segments/{{ s.id }}">
+    <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+    <input type="hidden" name="version" value="{{ s.version }}">
+    <div class="field"><label for="n-{{ s.id }}">الاسم</label><input id="n-{{ s.id }}" name="name" type="text" value="{{ s.name }}" required maxlength="200"></div>
+    <div class="field"><label for="d-{{ s.id }}">الوصف</label><textarea id="d-{{ s.id }}" name="description" maxlength="2000">{{ s.description }}</textarea></div>
+    <div class="row">
+      <div class="field"><label for="f-{{ s.id }}">مؤشرات الملاءمة</label><textarea id="f-{{ s.id }}" name="fit_rules">{{ s.fit_rules|join("\n") }}</textarea><span class="hint">سطر لكل مؤشر</span></div>
+      <div class="field"><label for="x-{{ s.id }}">حالات الاستبعاد</label><textarea id="x-{{ s.id }}" name="exclusion_rules">{{ s.exclusion_rules|join("\n") }}</textarea><span class="hint">سطر لكل حالة</span></div>
+    </div>
+    <div class="field">
+      <label for="st-{{ s.id }}">الحالة</label>
+      <select id="st-{{ s.id }}" name="status">
+        <option value="active" {% if s.status == "active" %}selected{% endif %}>نشطة</option>
+        <option value="archived" {% if s.status == "archived" %}selected{% endif %}>مؤرشفة</option>
+      </select>
+    </div>
+    <div class="actions"><button class="btn" type="submit">حفظ</button></div>
+  </form>
+  {% else %}
+  <ul>{% for r in s.fit_rules %}<li>{{ r }}</li>{% endfor %}</ul>
+  {% endif %}
+</details>
+{% else %}
+<p class="card muted">لا توجد فئات بعد.</p>
+{% endfor %}
+
+{% if principal.is_owner %}
+<section class="card">
+  <h2>فئة جديدة</h2>
+  <form class="stack" method="post" action="/segments">
+    <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+    <div class="field"><label for="new-name">الاسم</label><input id="new-name" name="name" type="text" required maxlength="200" value="{{ form.get('name', '') if form else '' }}"></div>
+    <div class="field"><label for="new-desc">الوصف</label><textarea id="new-desc" name="description" maxlength="2000">{{ form.get('description', '') if form else '' }}</textarea></div>
+    <div class="row">
+      <div class="field"><label for="new-fit">مؤشرات الملاءمة</label><textarea id="new-fit" name="fit_rules">{{ form.get('fit_rules', '') if form else '' }}</textarea><span class="hint">سطر لكل مؤشر</span></div>
+      <div class="field"><label for="new-ex">حالات الاستبعاد</label><textarea id="new-ex" name="exclusion_rules">{{ form.get('exclusion_rules', '') if form else '' }}</textarea><span class="hint">سطر لكل حالة</span></div>
+    </div>
+    <div class="actions"><button class="btn" type="submit">إضافة الفئة</button></div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}المصادر{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>المصادر</h1>
+    <p class="lead">كل مصدر يبدأ غير نشط. الفحص يأخذ عينة صغيرة، والتفعيل يحتاج تأكيد المالك لسياسة الاستخدام والتخزين.</p>
+  </div>
+  {% if principal.is_owner %}<a class="btn" href="/sources/new">مصدر جديد</a>{% endif %}
+</div>
+<div class="card table-wrap">
+  <table class="responsive">
+    <thead><tr><th>المصدر</th><th>النوع</th><th>الحالة</th><th>آخر نجاح</th><th>ملاحظة</th></tr></thead>
+    <tbody>
+    {% for s in sources %}
+    <tr>
+      <td data-label="المصدر"><a href="/sources/{{ s.id }}">{{ s.name }}</a>{% if s.url %}<br><bdi dir="ltr" class="small muted">{{ s.url }}</bdi>{% endif %}</td>
+      <td data-label="النوع">{{ label("kind", s.kind) }}</td>
+      <td data-label="الحالة"><span class="badge tone-{{ tone(s.status) }}">{{ label("source", s.status) }}</span></td>
+      <td data-label="آخر نجاح">{{ s.last_success_at | dt }}</td>
+      <td data-label="ملاحظة" class="small muted">{{ s.status_reason or "" }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">لا توجد مصادر. {% if principal.is_owner %}<a href="/sources/new">أضف مصدرًا</a>.{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
