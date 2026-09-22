@@ -18,7 +18,7 @@
         "tests/conftest.py::migrated_db يحذف المخطط ويطبق كل الترحيلات من الصفر في كل تشغيل",
         "tests/integration/test_migrations.py (لا انحراف بين النماذج والترحيلات، RLS على كل الجداول)",
         "alembic upgrade → downgrade base → upgrade: نجح على قاعدة التطوير",
-        "نسخة git clone جديدة: uv sync --frozen ثم pytest (انظر docs/verification/m0-m1.md)"
+        "نسخة git clone جديدة من c66aa37: uv sync --frozen → ترحيلات قاعدة فارغة → seed → pytest = 122 passed (docs/verification/m0-m1.md)"
       ],
       "live_verification": "لم يُبنَ Docker image ولم يُنشر (لا Docker على جهاز التطوير، والنشر يحتاج تفويضًا)",
       "blocked_by": null
