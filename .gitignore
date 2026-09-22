@@ -13,3 +13,7 @@ playwright-report/
 .claude/settings.local.json
 # النسخة الأصلية للمواصفة خارج المستودع؛ النسخة المتتبعة هي SPEC.md
 sales-research-agent-harness.md
+
+# نسخ احتياطية (بيانات حقيقية)
+backups/
+evals/results/

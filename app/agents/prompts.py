@@ -228,3 +228,44 @@ FakeClient.responders.update(
         "reply_draft": _fake_reply,
     }
 )
+
+
+# ---------------------------------------------------------------- اختبار فهم المنتج
+
+
+class ProductUnderstanding(BaseModel):
+    problem_restated: str = Field(max_length=500)
+    ideal_customer: str = Field(max_length=400)
+    capabilities_understood: list[str] = Field(max_length=12)
+    will_not_claim: list[str] = Field(max_length=12)
+    sample_opening: str = Field(max_length=400)
+    concerns: list[str] = Field(max_length=8)
+
+
+UNDERSTANDING_SYSTEM = (
+    "أنت تراجع وصف منتج قبل استخدامه في رسائل مبيعات. أعد صياغة المشكلة والعميل المثالي بكلماتك، "
+    "واذكر الخصائص كما فهمتها من الوصف فقط، وما لن تدّعيه أبدًا (الخصائص غير المتاحة والسعر غير المعتمد)، "
+    "وافتتاحية قصيرة مهذبة بلا مبالغة، وأي غموض أو تعارض في الوصف يجب أن يصححه المالك. "
+    + UNTRUSTED_NOTE
+)
+
+
+def _fake_understanding(user: str, ctx: dict[str, Any]) -> dict[str, Any]:
+    product = ctx.get("product", {})
+    caps = [str(c) for c in product.get("capabilities", [])][:12]
+    concerns = [] if product.get("problem") else ["وصف المشكلة فارغ"]
+    if product.get("price_status") != "approved":
+        concerns.append("السعر غير معتمد؛ لن يُذكر في الرسائل")
+    return {
+        "problem_restated": str(product.get("problem", ""))[:500] or "غير واضح من الوصف",
+        "ideal_customer": "، ".join(product.get("segments", [])) or "غير محدد",
+        "capabilities_understood": caps,
+        "will_not_claim": [str(c) for c in product.get("unavailable", [])][:12],
+        "sample_opening": f"لاحظنا أن {product.get('problem', 'التحدي')} قد يكلفكم وقتًا؛ لدينا حل بسيط."[
+            :400
+        ],
+        "concerns": concerns,
+    }
+
+
+FakeClient.responders["product_understanding"] = _fake_understanding

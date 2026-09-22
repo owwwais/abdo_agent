@@ -359,3 +359,12 @@ async def change_product_status(
         change={"from": old, "to": target},
     )
     return product
+
+
+async def product_segment_names(db: AsyncSession, product_id: uuid.UUID) -> list[str]:
+    rows = await db.execute(
+        select(Segment.name)
+        .join(ProductSegment, ProductSegment.segment_id == Segment.id)
+        .where(ProductSegment.product_id == product_id)
+    )
+    return list(rows.scalars())

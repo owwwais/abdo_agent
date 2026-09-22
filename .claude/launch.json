@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "python", "-m", "app.main"],
+      "port": 8000
+    },
+    {
+      "name": "worker",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "python", "-m", "app.jobs.worker"],
+      "port": 8001
+    }
+  ]
+}

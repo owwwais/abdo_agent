@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -359,3 +359,19 @@ async def get_run(
             for e in events
         ],
     }
+
+
+@router.post("/products/{product_id}/test")
+async def product_test(
+    product_id: uuid.UUID,
+    request: Request,
+    p: Principal = Depends(current_principal),
+    settings: Settings = Depends(get_settings_dep),
+) -> dict[str, Any]:
+    """اختبار فهم محدود للمنتج بالنموذج المختار (فئة ميزانية test)."""
+    from app.services.connection_tests import test_product_understanding
+
+    require_owner(p)
+    return await test_product_understanding(
+        settings, request.app.state.sessionmaker, p.workspace_id, product_id, p.actor_id
+    )

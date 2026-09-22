@@ -33,7 +33,34 @@
     </form>
     {% endfor %}
   </div>
-  <p class="hint">اختبار فهم المنتج بالنموذج اللغوي يُبنى مع طبقة النماذج (F-019)؛ لا يوجد زر له قبل ذلك.</p>
+</section>
+
+<section class="card">
+  <h2>اختبار فهم المنتج</h2>
+  <p class="hint">يطلب من نموذج «الكاتب» المختار في الإعدادات إعادة صياغة وصفك: إن فهمه خطأً فستخطئ الرسائل أيضًا. استدعاء واحد محسوب على فئة «اختبار» في الميزانية.</p>
+  {% if understanding_error %}<p class="notice notice-bad" role="alert">{{ understanding_error }}</p>{% endif %}
+  {% if principal.is_owner %}
+  <form method="post" action="/products/{{ product.id }}/understanding">
+    <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+    <button class="btn btn-secondary" type="submit">اختبر فهم النموذج للمنتج</button>
+  </form>
+  {% endif %}
+  {% if understanding %}
+  {% set u = understanding.summary %}
+  {% if understanding.status == "completed" %}
+  <dl class="kv">
+    <dt>المشكلة كما فهمها</dt><dd>{{ u.get("problem_restated") }}</dd>
+    <dt>العميل المثالي</dt><dd>{{ u.get("ideal_customer") }}</dd>
+    <dt>الخصائص</dt><dd>{{ u.get("capabilities_understood", []) | join("، ") or "—" }}</dd>
+    <dt>لن يدّعي</dt><dd>{{ u.get("will_not_claim", []) | join("، ") or "—" }}</dd>
+    <dt>افتتاحية مقترحة</dt><dd>{{ u.get("sample_opening") }}</dd>
+    <dt>ملاحظات للمراجعة</dt><dd>{{ u.get("concerns", []) | join("، ") or "لا شيء" }}</dd>
+  </dl>
+  <p class="small muted">{{ u.get("model") }} · تكلفة {{ u.get("cost") }} · إصدار الوصف {{ u.get("product_version") }} · {{ understanding.started_at | dt }}{% if u.get("product_version") != product.version %} · <strong>الوصف تغيّر بعد هذا الاختبار</strong>{% endif %}</p>
+  {% else %}
+  <p class="notice notice-warn">آخر اختبار لم ينجح: {{ u.get("reason", "") }}</p>
+  {% endif %}
+  {% endif %}
 </section>
 {% endif %}
 

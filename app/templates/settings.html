@@ -225,7 +225,7 @@
       <label class="check"><input type="radio" name="inbound_mode" value="imap_poll" {% if c.inbound_mode == "imap_poll" %}checked{% endif %}> <span>مزامنة دورية فقط</span></label>
       <div class="notice notice-info small">
         رابط الويب هوك لإضافته في hPanel ← Emails ← Agentic mail ← Webhooks (الحدث message.received):
-        <bdi dir="ltr">{{ base_url }}/webhooks/email/hostinger</bdi>.
+        <bdi dir="ltr" class="url">{{ base_url }}/webhooks/email/hostinger</bdi>.
         يحتاج رابطًا عامًا بـhttps؛ محليًا تكفي المزامنة الدورية. انسخ السر الذي يعرضه Hostinger مرة واحدة إلى الحقل التالي أو إلى HOSTINGER_WEBHOOK_SECRET في ‎.env‎.
       </div>
       {{ secret_field("hostinger_webhook_secret") }}

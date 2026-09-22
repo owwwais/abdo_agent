@@ -311,3 +311,83 @@ async def apply_draft(
         )
     )
     return match, company_id
+
+
+async def add_manual_contact(
+    db: AsyncSession,
+    settings: Settings,
+    *,
+    workspace_id: uuid.UUID,
+    actor_id: str,
+    company_id: uuid.UUID,
+    channel: str,
+    value: str,
+    name: str = "",
+    role: str = "",
+    phone_region: str | None = None,
+) -> Contact:
+    """جهة اتصال يضيفها المستخدم يدويًا لشركة موجودة. أهليتها تبدأ «غير معروفة» حتى يوثّق سندها."""
+    from app.api.errors import Conflict, InvalidInput
+    from app.services import audit
+    from app.services.normalize import normalize_email, normalize_phone
+
+    try:
+        if channel == "email":
+            normalized, ok = normalize_email(value), True
+            key = normalized.lower()
+        elif channel == "phone":
+            normalized, ok = normalize_phone(value, phone_region)
+            key = normalized
+        else:
+            raise InvalidInput("القناة يجب أن تكون بريدًا أو هاتفًا")
+    except ValueError as exc:
+        raise InvalidInput(str(exc)) from exc
+    h = data_hash(settings, channel, key)
+    suppressed = (
+        await db.execute(
+            select(func.count())
+            .select_from(Suppression)
+            .where(
+                Suppression.workspace_id == workspace_id,
+                Suppression.scope == channel,
+                Suppression.target_hash == h,
+            )
+        )
+    ).scalar_one()
+    if suppressed or await company_suppressed(db, settings, workspace_id, company_id):
+        raise Conflict("هذه الجهة أو القيمة في سجل منع التواصل", code="suppressed")
+    existing = (
+        await db.execute(
+            select(Contact).where(
+                Contact.workspace_id == workspace_id,
+                Contact.company_id == company_id,
+                Contact.channel == channel,
+                Contact.value_hash == h,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return existing
+    contact = Contact(
+        workspace_id=workspace_id,
+        company_id=company_id,
+        channel=channel,
+        value=normalized.removeprefix("raw:"),
+        value_hash=h,
+        normalized=ok,
+        professional_name=name.strip()[:200] or None,
+        role_title=role.strip()[:200] or None,
+        provenance={"source": "manual", "actor": actor_id},
+    )
+    db.add(contact)
+    await db.flush()
+    audit.record(
+        db,
+        workspace_id=workspace_id,
+        actor_id=actor_id,
+        action="contact.add_manual",
+        entity_type="contact",
+        entity_id=contact.id,
+        change={"channel": channel},
+    )
+    return contact

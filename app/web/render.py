@@ -129,6 +129,12 @@ LABELS: dict[str, dict[str, str]] = {
         "connection_test": "اختبار اتصال",
     },
     "direction": {"inbound": "وارد", "outbound": "صادر"},
+    "score": {
+        "need_evidence": "دليل الحاجة (من 35)",
+        "product_fit": "ملاءمة المنتج (من 30)",
+        "contact_clarity": "وضوح قناة التواصل (من 20)",
+        "timing": "التوقيت (من 15)",
+    },
 }
 
 TONES = {
@@ -193,6 +199,8 @@ FLASH = {
     "import_committed": "اعتُمدت الدفعة.",
     "import_canceled": "أُلغيت الدفعة وحُذفت بيانات صفوفها.",
     "manual_added": "سُجلت الجهة.",
+    "understanding": "اكتمل اختبار فهم المنتج؛ راجع النتيجة أدناه.",
+    "contact_added": "أُضيفت جهة الاتصال. وثّق أهلية التواصل قبل أي بريد، ثم اضغط «معالجة الآن» في الفرصة.",
 }
 
 
@@ -218,6 +226,7 @@ def render(request: Request, name: str, status_code: int = 200, **context: Any) 
     context.setdefault("principal", getattr(request.state, "principal", None))
     context.setdefault("flash", FLASH.get(request.query_params.get("ok", ""), None))
     context["env"] = settings.app_env.value
+    context["outbound_enabled_env"] = settings.outbound_enabled
     context["request_path"] = request.url.path
     return templates.TemplateResponse(request, name, context, status_code=status_code)
 

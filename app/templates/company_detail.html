@@ -40,24 +40,50 @@
 </div>
 <section class="card">
   <h2>جهات الاتصال</h2>
-  <p class="hint">أهلية التواصل غير معروفة افتراضيًا، والإرسال ممنوع حتى تُوثق.</p>
+  <p class="hint">أهلية التواصل غير معروفة افتراضيًا، والإرسال بالبريد ممنوع حتى تُوثق بسند (من صفحة الفرصة أو الموافقات).</p>
+  {% if contact_error %}<p class="notice notice-bad" role="alert">{{ contact_error }}</p>{% endif %}
   <div class="table-wrap">
     <table class="responsive">
       <thead><tr><th>القناة</th><th>القيمة</th><th>الاسم المهني</th><th>الصيغة</th><th>أهلية التواصل</th></tr></thead>
       <tbody>
-      {% for ct, masked in contacts %}
+      {% for ct, masked, elig in contacts %}
       <tr>
         <td data-label="القناة">{{ label("channel", ct.channel) }}</td>
         <td data-label="القيمة"><bdi dir="ltr">{{ masked }}</bdi></td>
         <td data-label="الاسم">{{ ct.professional_name or "—" }}{% if ct.role_title %} · {{ ct.role_title }}{% endif %}</td>
         <td data-label="الصيغة">{{ "مطبعة" if ct.normalized else "غير مؤكدة" }}</td>
-        <td data-label="الأهلية"><span class="badge tone-warn">غير معروفة</span></td>
+        <td data-label="الأهلية"><span class="badge tone-{{ tone(elig) }}">{{ label("eligibility", elig) }}</span></td>
       </tr>
       {% else %}<tr><td colspan="5" class="muted">لا توجد جهات اتصال.</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>
+  <details>
+    <summary>إضافة جهة اتصال يدويًا</summary>
+    <form method="post" action="/companies/{{ company.id }}/contacts" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+      <div class="row">
+        <div class="field"><label for="ch">القناة</label>
+          <select id="ch" name="channel"><option value="email">بريد</option><option value="phone">هاتف (واتساب يدوي)</option></select></div>
+        <div class="field"><label for="val">القيمة</label><input id="val" class="ltr" type="text" name="value" required maxlength="320" placeholder="info@example.com أو +9665…"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="nm">الاسم المهني (اختياري)</label><input id="nm" type="text" name="name" maxlength="200"></div>
+        <div class="field"><label for="rl">المسمى (اختياري)</label><input id="rl" type="text" name="role" maxlength="200"></div>
+      </div>
+      <p class="hint">أضف فقط قنوات عمل منشورة للتواصل التجاري أو جاءتك بإذن. لا تضف أرقامًا أو بريدًا شخصيًا.</p>
+      <div class="actions"><button class="btn btn-secondary" type="submit">إضافة</button></div>
+    </form>
+  </details>
 </section>
+{% if opportunities %}
+<section class="card">
+  <h2>الفرص</h2>
+  <ul class="plain">
+    {% for o, pname in opportunities %}<li><a href="/opportunities/{{ o.id }}">{{ pname }}</a> <span class="badge tone-{{ tone(o.status) }}">{{ label("opportunity", o.status) }}</span></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
 <section class="card">
   <h2>المصادر</h2>
   <ul class="plain">

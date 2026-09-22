@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -129,7 +130,11 @@ if __name__ == "__main__":
     s = get_settings()
     logging.basicConfig(level=s.log_level)
     config = uvicorn.Config(
-        "app.main:create_app", factory=True, host="127.0.0.1", port=8000, proxy_headers=False
+        "app.main:create_app",
+        factory=True,
+        host="127.0.0.1",
+        port=int(os.environ.get("PORT", "8000")),
+        proxy_headers=False,
     )
     server = uvicorn.Server(config)
     asyncio.run(server.serve(), loop_factory=loop_factory())

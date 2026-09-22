@@ -192,6 +192,10 @@ async def approvals_page(
         error=error,
         outbound_enabled=settings.outbound_enabled,
         forced_fake=integ.forced_fake(settings),
+        mail_fake=(
+            await integ.get_config(db, settings, p.workspace_id, "mail", integ.MailConfig)
+        ).provider
+        == "fake",
     )
 
 
@@ -377,6 +381,66 @@ async def reconcile(
     except AppError as exc:
         return await _approvals_error(request, p, db, settings, exc)
     return _back("/approvals", "reconciled")
+
+
+@router.post("/companies/{company_id}/contacts")
+async def add_contact(
+    company_id: uuid.UUID,
+    request: Request,
+    p: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+) -> Response:
+    from app.db.models import Workspace
+    from app.services.companies import add_manual_contact
+
+    form = await request.form()
+    company = await get_scoped(db, Company, p.workspace_id, company_id)
+    ws = await db.get(Workspace, p.workspace_id)
+    try:
+        await add_manual_contact(
+            db,
+            settings,
+            workspace_id=p.workspace_id,
+            actor_id=p.actor_id,
+            company_id=company.id,
+            channel=_s(form, "channel"),
+            value=_s(form, "value"),
+            name=_s(form, "name"),
+            role=_s(form, "role"),
+            phone_region=ws.default_phone_region if ws else None,
+        )
+        await db.commit()
+    except AppError as exc:
+        await db.rollback()
+        return RedirectResponse(
+            f"/companies/{company_id}?contact_error={quote(exc.message[:200])}", status_code=303
+        )
+    return RedirectResponse(f"/companies/{company_id}?ok=contact_added", status_code=303)
+
+
+@router.post("/products/{product_id}/understanding")
+async def product_understanding(
+    product_id: uuid.UUID,
+    request: Request,
+    p: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+) -> Response:
+    from app.services.connection_tests import test_product_understanding
+
+    require_owner(p)
+    await get_scoped(db, Product, p.workspace_id, product_id)
+    try:
+        await test_product_understanding(
+            settings, request.app.state.sessionmaker, p.workspace_id, product_id, p.actor_id
+        )
+    except AppError as exc:
+        return RedirectResponse(
+            f"/products/{product_id}?understanding_error={quote(exc.message[:200])}",
+            status_code=303,
+        )
+    return RedirectResponse(f"/products/{product_id}?ok=understanding", status_code=303)
 
 
 # ---------------------------------------------------------------- الفرص

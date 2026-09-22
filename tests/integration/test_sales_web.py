@@ -166,3 +166,29 @@ async def test_other_workspace_cannot_see_sales_data(
         json={"decision": "approve", "revision": 1, "content_hash": d.content_hash},
     )
     assert r.status_code == 404
+
+
+async def test_manual_contact_then_understanding_test(
+    sm: async_sessionmaker[AsyncSession], ws: WorkspaceFixture, client_for: ClientFactory
+) -> None:
+    s = await seed_draft(sm, ws)
+    owner = await client_for(ws.owner, csrf=False)
+    token = csrf_of((await owner.get(f"/companies/{s.company}")).text)
+    bad = await owner.post(
+        f"/companies/{s.company}/contacts",
+        data={"csrf_token": token, "channel": "email", "value": "not-an-email"},
+    )
+    assert bad.status_code == 303 and "contact_error" in bad.headers["location"]
+    ok = await owner.post(
+        f"/companies/{s.company}/contacts",
+        data={"csrf_token": token, "channel": "email", "value": "Sales@Clinic-Waha.example"},
+    )
+    assert ok.status_code == 303 and "ok=contact_added" in ok.headers["location"]
+    page = (await owner.get(f"/companies/{s.company}")).text
+    assert "غير معروفة" in page and "مسموح (موثق)" in page  # الجديدة غير موثقة، والأولى موثقة
+    tested = await owner.post(f"/products/{s.product}/understanding", data={"csrf_token": token})
+    assert tested.status_code == 303 and "ok=understanding" in tested.headers["location"]
+    product_page = (await owner.get(f"/products/{s.product}")).text
+    assert "المشكلة كما فهمها" in product_page and "ضياع الحجوزات" in product_page
+    api = await client_for(ws.reviewer)
+    assert (await api.post(f"/api/products/{s.product}/test")).status_code == 403

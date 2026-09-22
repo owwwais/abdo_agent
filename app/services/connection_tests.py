@@ -255,3 +255,84 @@ def health_badge(health: dict[str, Any]) -> tuple[str, str]:
     if not health or "ok" not in health:
         return ("muted", "لم يُختبر")
     return ("ok", "يعمل") if health.get("ok") else ("bad", "فشل آخر اختبار")
+
+
+async def test_product_understanding(
+    settings: Settings,
+    sm: async_sessionmaker[AsyncSession],
+    workspace_id: uuid.UUID,
+    product_id: uuid.UUID,
+    actor_id: str,
+) -> dict[str, Any]:
+    """اختبار فهم المنتج (F-019): النموذج يعيد صياغة الوصف ليتحقق المالك قبل أي مسودة. يُسجل كتشغيل."""
+    from app.agents.prompts import (
+        PROMPT_VERSION,
+        UNDERSTANDING_SYSTEM,
+        ProductUnderstanding,
+        context_block,
+    )
+    from app.api.errors import NotFound
+    from app.services import runs
+    from app.services.products import product_segment_names
+
+    async with sm() as db:
+        product = await db.get(Product, product_id)
+        if product is None or product.workspace_id != workspace_id:
+            raise NotFound("المنتج غير موجود")
+        segments = await product_segment_names(db, product.id)
+        ctx = {
+            "product": {
+                "name": product.name,
+                "summary": product.summary,
+                "problem": product.problem,
+                "capabilities": product.capabilities,
+                "unavailable": product.unavailable_capabilities,
+                "fit_signals": product.fit_signals,
+                "exclusions": product.exclusions,
+                "price_status": product.price_status,
+                "price": product.price_text if product.price_status == "approved" else "",
+                "segments": segments,
+            }
+        }
+        version = product.version
+    run_id = await runs.start_run(
+        sm,
+        workspace_id,
+        "connection_test",
+        snapshot={
+            "test": "product_understanding",
+            "product_id": str(product_id),
+            "version": version,
+        },
+    )
+    try:
+        out, usage = await ModelGateway(settings, sm, workspace_id).complete(
+            role="writer",
+            system=UNDERSTANDING_SYSTEM,
+            user="راجع وصف المنتج التالي.\n" + context_block(ctx),
+            output_model=ProductUnderstanding,
+            schema_name="product_understanding",
+            category="test",
+            counter=CallCounter(2),
+            run_id=run_id,
+            max_output_tokens=1500,
+            prompt_version=PROMPT_VERSION,
+        )
+    except (ProviderError, AppError) as exc:
+        await runs.finish_run(
+            sm,
+            run_id,
+            "failed",
+            summary={"reason": str(exc)[:300]},
+            error_code="understanding_failed",
+        )
+        raise AppError(str(exc), code=getattr(exc, "code", "understanding_failed")) from exc
+    result = {
+        **out.model_dump(),
+        "model": f"{usage.provider}/{usage.model}",
+        "cost": str(usage.cost.quantize(Decimal("0.000001"))),
+        "product_version": version,
+        "actor": actor_id,
+    }
+    await runs.finish_run(sm, run_id, "completed", summary=result)
+    return result

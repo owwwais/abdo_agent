@@ -1,53 +1,56 @@
 # التسليم — آخر حالة
 
-**التاريخ:** 2026-09-22 · **المرحلة:** اكتمل M0 وM1 محليًا بموصلات اختبار. التالي M2.
+**التاريخ:** 2026-09-22 · **المرحلة:** M0–M6 مبنية ومختبرة محليًا بموصلات اصطناعية. المتبقي: إدخال مفاتيح حقيقية ثم النشر (F-018).
 
 ## آخر ما تحقق
 
-F-001، F-002، F-003، F-004، F-005 = `verified` محليًا (الأدلة في `harness/features.json` و`docs/verification/m0-m1.md`). F-013 منفذ جزئيًا (أساس الطابور مختبر).
+18 خاصية من 19 = `verified` محليًا، وF-018 (النشر والنسخ الاحتياطي) `in_progress`: النسخ الاحتياطي والاسترجاع مختبران والأدلة مكتوبة، لكن لم تُبنَ صورة Docker ولم يُنشر شيء. الأدلة في `harness/features.json` و`docs/verification/m0-m1.md` و`docs/verification/m2-m6.md`.
 
 ## الأوامر ونتائجها
 
-- `uv run pytest -q` → 122 passed.
-- `uv run ruff check app scripts tests` و`uv run mypy app scripts` → نظيف.
-- `alembic upgrade/check/downgrade/upgrade` → نجح بلا انحراف.
+- `uv run pytest -q` → **180 passed** (وحدة + تكامل على PostgreSQL حقيقي + HTML + E2E بمتصفح).
+- `uv run ruff check` و`ruff format --check` و`mypy app scripts` → نظيف.
+- `alembic upgrade head` من قاعدة فارغة → 0001، 0002، 0003 بلا انحراف.
+- `scripts/backup.py dump` ثم `verify` → استرجاع ناجح في قاعدة مؤقتة.
+- `scripts/eval_models.py` → يعمل، وحكم على المصنف الاصطناعي بـ«غير مقبول» لسقوطه في حالتي حقن.
 
-## الملفات الأساسية
+## الملفات الأساسية (إضافة إلى ما سبق في M0/M1)
 
-- الإعداد والحواجز: `app/config.py`
-- النماذج والترحيلات: `app/db/models.py`، `migrations/versions/0001_*.py` (M0)، `0002_*.py` (M1)
-- الهوية: `app/auth/`، `app/api/deps.py`
-- المصادر والجلب الآمن: `app/connectors/`، `app/services/sources.py`
-- الاستيراد والتكرار: `app/services/imports.py`، `companies.py`، `normalize.py`
-- الطابور والعامل: `app/jobs/`
-- الواجهة: `app/web/pages.py`، `app/templates/`، `app/static/app.css`
+- الدورة: `app/workflows/` (`discovery.py`، `opportunity.py`، `processing.py`، `checkpoint.py`، `common.py`)
+- النماذج والبوابة: `app/agents/` (`gateway.py`، `providers.py`، `prompts.py`)
+- الاعتماد والإرسال: `app/services/approvals.py`، `outbound.py`، `policy.py`
+- الوارد والقنوات: `app/services/inbound.py`، `telegram_bot.py`، `channels.py`، `app/connectors/mail.py`، `search.py`، `telegram.py`
+- التشغيل: `app/jobs/scheduler.py`، `app/services/digest.py`، `cleanup.py`، `runs.py`، `budget.py`
+- الإعدادات والأسرار: `app/services/integrations.py`، `secrets.py`، `connection_tests.py`، `app/web/settings_pages.py`
+- الواجهة: `app/web/sales_pages.py` + قوالب `approvals/opportunities/opportunity_detail/conversations/runs`
+- الواجهة البرمجية: `app/api/sales_api.py`، `app/api/webhooks.py`
+- الأدلة: `docs/runbooks/launch-guide.md` (الدليل الكامل للمالك)، `backup-restore.md`، `docs/decisions/0007`
 
-## العوائق الحقيقية (لا تمنع البناء المحلي)
+## العوائق (كلها تحتاج قرار المالك أو حسابه، لا برمجة)
 
 | العائق | يمنع |
 |---|---|
-| لا مشروع Supabase | التحقق الحي من الدخول (F-002 live) |
-| لم يُختر مزود بحث ولا حسابه | موصل البحث الحقيقي (F-006 live) |
-| لم يُختر مزود نماذج ولا مفاتيحه وسياسة المعالجة | F-007 live، F-017 |
-| لم يُختر مزود بريد (Gmail/Microsoft/غيره) | F-010/F-011 live |
-| لا بوت تيليجرام ولا مجموعة اختبار | F-009 live |
-| لا ميزانية نقدية محددة | تشغيل live (مطلوبة في الإعداد خارج المحلي) |
-| لا بيانات منتجات حقيقية ولا رابط منصة «فرصة» | استبدال بيانات demo |
-| Docker غير مثبت محليًا | بناء الصورة والتحقق منها |
-
-## قرارات جديدة
-
-`docs/decisions/0001`–`0006`. أبرزها: Python 3.12؛ مخطط `sales` مع RLS رفض افتراضي والعزل في الكود والمفاتيح المركبة؛ `SUPABASE_PUBLISHABLE_KEY` بدل `SUPABASE_AUTH_PUBLIC_KEY` وإضافة `DATA_HASH_KEY`؛ الاستيراد يحتاج مصدرًا نشطًا؛ فصل «اختبار فهم المنتج» إلى F-019.
+| لا مشروع Supabase ولا مفاتيحه | الدخول الحقيقي والنشر |
+| لا مفتاح نموذج ولا اعتماد سياسة المعالجة | التشغيل الفعلي وتقييم نموذج حقيقي |
+| لا مفتاح Brave | اكتشاف حقيقي (البحث يبقى اصطناعيًا) |
+| لا كلمة مرور صندوق Hostinger ولا سر الويب هوك | الإرسال والاستقبال الحقيقيان |
+| لا بوت تيليجرام ولا مجموعة | الاعتماد من تيليجرام (اللوحة بديل كامل) |
+| لا ميزانية نقدية محددة | التحويل إلى وضع live (شرط في لوحة الجاهزية) |
+| لا حساب Render ولا Docker محليًا | بناء الصورة والنشر |
 
 ## ديون معروفة (صغيرة)
 
-- ربط شركة موجودة لا يكمل الحقول الفارغة (قطاع/مدينة) من المصدر الجديد.
-- لا مهمة تنظيف لانتهاء `source_checks` و`import_batches` بعد (M5).
+- ربط شركة موجودة لا يكمل الحقول الفارغة من المصدر الجديد.
 - إدارة الأعضاء عبر سكربت لا واجهة.
-- إشارة SIGTERM في Windows غير مدعومة في العامل (Linux يعمل).
+- `SIGTERM` غير مدعوم في العامل على Windows (Linux يعمل).
+- المصدر التجريبي في قاعدة قديمة يبقى بـ`connector_key = fake_search`؛ التثبيت الجديد يستخدم `web_search`.
+- تقييم النماذج يغطي دور الاستخراج (تصنيف الردود) فقط؛ لا تقييم آلي لجودة المسودات.
+- لا مقياس زمني لاستجابة IMAP تحت ضغط؛ حجم الصندوق الحقيقي غير مُختبر.
 
 ## الخطوة التالية الدقيقة
 
-1. ابدأ F-013 (المجدول): مهمة `discover_daily` بمفتاح `workspace:discover:<التاريخ المحلي>`، نافذة سماح، قفل workspace لمسار المبيعات، وتنظيف الانتهاء؛ لأنها اعتمادية F-006.
-2. ثم F-006: `discover()` لموصلي `html` و`fake_search`، اختيار منتج/فئة/مصدر مرجح بلا تجويع، `skipped_configuration`، حدود 3 استعلامات و20 مرشحًا، وتسجيل المرشحين عبر `companies.apply_draft`.
-3. ثم F-007: تثبيت LangGraph بعد التحقق من الإصدار والـPostgres checkpointer الرسمي وتسجيله في ADR 0001، ModelGateway مع FakeModel، جداول evidence/opportunities/drafts (ترحيل 0003).
+1. المالك يتبع `docs/runbooks/launch-guide.md` من القسم 3: Supabase ← المفاتيح ← صفحة الإعدادات.
+2. `scripts/eval_models.py --yes` على النموذج المختار قبل اعتماده.
+3. تجربة مغلقة: `OUTBOUND_ALLOWLIST` ببريد المالك ثم `OUTBOUND_ENABLED=true`، وإرسال حقيقي واحد للتحقق من SMTP ومجلد المرسل والرد.
+4. النشر على Render (F-018) ثم ويب هوك Hostinger، ثم تحويل وضع التشغيل إلى live.
+5. بعد أسبوع تشغيل: مراجعة الأخطاء الحقيقية في «التشغيل والسجلات» وضبط حد التأهيل والميزانية.

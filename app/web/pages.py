@@ -440,6 +440,22 @@ async def _product_form(
     if product is not None:
         linked = await product_service.product_segments(db, p, product.id)
         problems = await product_service.activation_problems(db, product)
+        from app.db.models_ops import Run
+
+        understanding = (
+            await db.execute(
+                select(Run)
+                .where(
+                    Run.workspace_id == p.workspace_id,
+                    Run.kind == "connection_test",
+                    Run.config_snapshot["product_id"].astext == str(product.id),
+                )
+                .order_by(Run.started_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        extra.setdefault("understanding", understanding)
+        extra.setdefault("understanding_error", request.query_params.get("understanding_error"))
     return render(
         request,
         "product_form.html",
@@ -836,15 +852,31 @@ async def company_detail(
         ).tuples()
     )
     segment = await db.get(Segment, c.segment_id) if c.segment_id else None
+    from app.db.models_sales import Opportunity
+    from app.services.approvals import eligibility
+
+    opps = list(
+        (
+            await db.execute(
+                select(Opportunity, Product.name)
+                .join(Product, Product.id == Opportunity.product_id)
+                .where(Opportunity.company_id == c.id, Opportunity.workspace_id == p.workspace_id)
+            )
+        ).tuples()
+    )
     return render(
         request,
         "company_detail.html",
         company=c,
         identifiers=identifiers,
         links=links,
-        contacts=[(ct, ser.mask(ct.channel, ct.value)) for ct in contacts],
+        contacts=[
+            (ct, ser.mask(ct.channel, ct.value), await eligibility(db, ct.id)) for ct in contacts
+        ],
         duplicates=dup_rows,
         segment=segment,
+        opportunities=opps,
+        contact_error=request.query_params.get("contact_error"),
     )
 
 

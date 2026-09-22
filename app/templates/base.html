@@ -9,9 +9,14 @@
 </head>
 <body>
   <a class="skip" href="#main">تخطَّ إلى المحتوى</a>
-  {% if env in ("demo", "development", "test") %}
+  {% if env in ("demo", "test") %}
   <div class="env-banner" role="note">
-    بيئة <bdi dir="ltr">{{ env }}</bdi>: موصلات اصطناعية أو محلية، ولا إرسال حقيقي لأي جهة.
+    بيئة <bdi dir="ltr">{{ env }}</bdi>: موصلات اصطناعية، ولا إرسال حقيقي لأي جهة.
+  </div>
+  {% elif env == "development" %}
+  <div class="env-banner" role="note">
+    بيئة تطوير محلية: ما لم تُضبط مفاتيحه في الإعدادات يعمل اصطناعيًا.
+    {% if outbound_enabled_env %}<strong>الإرسال الحقيقي مفعل</strong> لمن يطابق قائمة السماح.{% else %}لا إرسال بريد حقيقي (<bdi dir="ltr">OUTBOUND_ENABLED=false</bdi>).{% endif %}
   </div>
   {% endif %}
   <header class="topbar">

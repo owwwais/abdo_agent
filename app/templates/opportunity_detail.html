@@ -35,7 +35,7 @@
     <p>{{ opp.selection_reason or "—" }}</p>
     {% if opp.score_breakdown %}
     <dl class="kv">
-      {% for k, v in opp.score_breakdown.items() %}<dt>{{ k }}</dt><dd>{{ v.score if v is mapping else v }}{% if v is mapping and v.reason %} — {{ v.reason }}{% endif %}</dd>{% endfor %}
+      {% for k, v in opp.score_breakdown.items() %}<dt>{{ label("score", k) }}</dt><dd>{{ v.score if v is mapping else v }}{% if v is mapping and v.reason %} — {{ v.reason }}{% endif %}</dd>{% endfor %}
     </dl>
     {% endif %}
   </section>

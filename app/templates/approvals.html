@@ -31,6 +31,8 @@
 
 {% if forced_fake %}
 <p class="notice notice-info" role="note">بيئة demo: الإرسال يذهب إلى صندوق اصطناعي، ولا يصل إلى أي جهة حقيقية.</p>
+{% elif mail_fake %}
+<p class="notice notice-info" role="note">البريد اصطناعي لأن إعدادات SMTP لم تُحفظ بعد (الإعدادات ← البريد). الاعتماد يسجل «إرسالًا» اصطناعيًا لا يصل إلى أحد؛ مفيد لتجربة الدورة كاملة.</p>
 {% elif not outbound_enabled %}
 <p class="notice notice-warn" role="note">الإرسال الفعلي معطل (<bdi dir="ltr">OUTBOUND_ENABLED=false</bdi>). تبقى الرسائل المعتمدة في الطابور حتى تفعّله بنفسك في ملف البيئة.</p>
 {% endif %}
@@ -94,7 +96,7 @@
       <li>{{ f.claim }}{% if ev and ev.url %} — <a href="{{ ev.url }}" rel="noopener noreferrer" target="_blank"><bdi dir="ltr">{{ ev.url }}</bdi></a>{% elif not ev %} <span class="badge tone-muted">الدليل انتهت صلاحيته</span>{% endif %}</li>
       {% else %}<li class="muted">لا حقائق مسجلة.</li>{% endfor %}
     </ul>
-    {% if x.opp.score_breakdown %}<p class="small muted">توزيع الدرجة: {% for k, v in x.opp.score_breakdown.items() %}{{ k }} {{ v.score if v is mapping else v }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+    {% if x.opp.score_breakdown %}<p class="small muted">توزيع الدرجة: {% for k, v in x.opp.score_breakdown.items() %}{{ label("score", k) }} {{ v.score if v is mapping else v }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
   </details>
 
   {% if d.channel == "email" and d.recipient_contact_id and x.eligibility != "allowed" %}

@@ -1,6 +1,11 @@
 {
   "updated": "2026-09-22",
-  "status_values": ["pending", "in_progress", "blocked", "verified"],
+  "status_values": [
+    "pending",
+    "in_progress",
+    "blocked",
+    "verified"
+  ],
   "note": "verified = اجتاز فحصًا مسجلًا محليًا. live_verification منفصل: التحقق مع مزود حقيقي.",
   "features": [
     {
@@ -27,7 +32,9 @@
       "id": "F-002",
       "milestone": "M0",
       "title": "الهوية والعضويات والجلسات وعزل الـworkspace",
-      "depends_on": ["F-001"],
+      "depends_on": [
+        "F-001"
+      ],
       "status": "verified",
       "acceptance": [
         "زائر لا يصل للبيانات",
@@ -49,7 +56,9 @@
       "id": "F-003",
       "milestone": "M1",
       "title": "CRUD المنتجات والفئات المستهدفة",
-      "depends_on": ["F-002"],
+      "depends_on": [
+        "F-002"
+      ],
       "status": "verified",
       "acceptance": [
         "إضافة منتج وفئة دون تعديل كود",
@@ -68,7 +77,9 @@
       "id": "F-004",
       "milestone": "M1",
       "title": "إعداد المصادر واختبار العينة والتفعيل",
-      "depends_on": ["F-002"],
+      "depends_on": [
+        "F-002"
+      ],
       "status": "verified",
       "acceptance": [
         "المصدر يبدأ غير نشط؛ لا تفعيل صامت (T02)",
@@ -90,7 +101,9 @@
       "id": "F-005",
       "milestone": "M1",
       "title": "الإدخال اليدوي واستيراد CSV وإزالة التكرار",
-      "depends_on": ["F-004"],
+      "depends_on": [
+        "F-004"
+      ],
       "status": "verified",
       "acceptance": [
         "CSV يعرض أخطاء الصفوف دون إسقاط الملف كله",
@@ -110,8 +123,13 @@
       "id": "F-006",
       "milestone": "M2",
       "title": "دورة اكتشاف يومية محدودة",
-      "depends_on": ["F-003", "F-004", "F-005", "F-013"],
-      "status": "pending",
+      "depends_on": [
+        "F-003",
+        "F-004",
+        "F-005",
+        "F-013"
+      ],
+      "status": "verified",
       "acceptance": [
         "دورة واحدة يوميًا لكل workspace بمفتاح فريد، دون تعويض أيام فائتة",
         "اختيار منتج وفئة ومصدر نشط بتوزيع مرجح يمنع التجويع، مع سبب الاختيار",
@@ -120,157 +138,273 @@
         "discover() في موصلات html وfake_search",
         "شاشة قرار الدمج/الفصل لمرشحي التكرار"
       ],
-      "evidence": [],
-      "blocked_by": null
+      "evidence": [
+        "app/workflows/discovery.py: اختيار موزون، 1-3 استعلامات، سقف مرشحين، دليل لكل مرشح",
+        "tests/integration/test_pipeline.py::test_discovery_is_bounded_idempotent_and_skips_without_config (دورة واحدة لكل يوم محلي)",
+        "تشغيل يدوي في المتصفح: 3 مرشحين بأدلة من المصدر، وRun بخطوات منقحة"
+      ],
+      "blocked_by": null,
+      "live_verification": "لم يُجرَّب مع Brave حقيقي (لا مفتاح)"
     },
     {
       "id": "F-007",
       "milestone": "M2",
       "title": "التأهيل والأدلة والمسودة (LangGraph + ModelGateway)",
-      "depends_on": ["F-006"],
-      "status": "pending",
+      "depends_on": [
+        "F-006"
+      ],
+      "status": "verified",
       "acceptance": [
         "ModelGateway بأدوار extractor/qualifier_writer وFakeModel أولًا",
         "الأدلة مربوطة ومسموح استعمالها؛ الدرجة محسوبة برمجيًا",
         "لا خصائص أو أسعار مختلقة في المسودة (T08)",
         "PostgreSQL checkpointer واستئناف بنفس thread (T09)"
       ],
-      "evidence": [],
-      "blocked_by": null
+      "evidence": [
+        "app/workflows/opportunity.py: رسم LangGraph بحفظ دائم في sales_graph، إثراء محدود، تحقق أدلة، تأهيل بالكود، فحص سياسة بإصلاح واحد",
+        "tests/integration/test_pipeline.py (T08، T09، الدرجة ≥70 بأدلة سارية فقط)",
+        "docs/verification/m2-m6.md بند 4: تأهيل 77/100 في تشغيل حقيقي"
+      ],
+      "blocked_by": null,
+      "live_verification": "النموذج المستخدم اصطناعي؛ لم يُستدعَ مزود حقيقي"
     },
     {
       "id": "F-008",
       "milestone": "M3",
       "title": "موافقة مرتبطة بإصدار مسودة لا تنفذ مرتين",
-      "depends_on": ["F-002", "F-007"],
-      "status": "pending",
+      "depends_on": [
+        "F-002",
+        "F-007"
+      ],
+      "status": "verified",
       "acceptance": [
         "طلبان متزامنان للموافقة ينشئان أمر إرسال واحدًا",
         "تعديل المستلم يلغي الموافقة السابقة",
         "حساب غير مخول لا يستطيع الاعتماد"
       ],
-      "evidence": [],
+      "evidence": [
+        "app/services/approvals.py: القرار مرتبط بـ(draft_id, revision, content_hash) وidempotent",
+        "tests/integration/test_approvals_outbound.py (T10، T11، ورفض الاعتماد بلا أهلية موثقة)",
+        "tests/e2e/test_browser_flow.py: زر الاعتماد معطل حتى توثيق السند"
+      ],
       "blocked_by": null
     },
     {
       "id": "F-009",
       "milestone": "M3",
       "title": "بوت تيليجرام آمن وبطاقات اعتماد",
-      "depends_on": ["F-008"],
-      "status": "pending",
+      "depends_on": [
+        "F-008"
+      ],
+      "status": "verified",
       "acceptance": [
         "تحقق السر والمجموعة والعضو ومنع تكرار update_id",
         "الاعتماد من البوت يمر بخدمة الاعتماد نفسها",
         "callback opaque محدود العمر"
       ],
-      "evidence": [],
-      "blocked_by": "حساب بوت ومجموعة تيليجرام للاختبار الحي"
+      "evidence": [
+        "app/services/telegram_bot.py: رموز نداء مبهمة لمرة واحدة، تحقق المجموعة والعضو، /link",
+        "tests/integration/test_inbound_channels.py::test_telegram_card_link_and_approve (تكرار التحديث، انتهاء الصلاحية، عضو غير مربوط)",
+        "app/api/webhooks.py: ترويسة X-Telegram-Bot-Api-Secret-Token"
+      ],
+      "blocked_by": null,
+      "live_verification": "بنقل httpx مزيف؛ لا بوت حقيقي"
     },
     {
       "id": "F-010",
       "milestone": "M4",
       "title": "أوامر إرسال البريد idempotent ومصالحة unknown_delivery",
-      "depends_on": ["F-008"],
-      "status": "pending",
-      "acceptance": ["timeout بعد إرسال مؤكد يدخل unknown_delivery ولا يعيد إرسالًا أعمى (T13)"],
-      "evidence": [],
-      "blocked_by": "قرار مزود البريد (SPEC §17)"
+      "depends_on": [
+        "F-008"
+      ],
+      "status": "verified",
+      "acceptance": [
+        "timeout بعد إرسال مؤكد يدخل unknown_delivery ولا يعيد إرسالًا أعمى (T13)"
+      ],
+      "evidence": [
+        "app/services/outbound.py: ثلاث مراحل، وسيج الحجز، وفحوص ما قبل الإرسال",
+        "tests/integration/test_approvals_outbound.py (T12، T13، انقطاع العامل، منع التواصل، قائمة السماح، الإيقاف)"
+      ],
+      "blocked_by": null,
+      "live_verification": "FakeMailbox فقط؛ OUTBOUND_ENABLED=false طوال الجلسة"
     },
     {
       "id": "F-011",
       "milestone": "M4",
       "title": "البريد الوارد والربط والتصنيف والرد",
-      "depends_on": ["F-010"],
-      "status": "pending",
-      "acceptance": ["تكرار webhook لا يكرر التحليل (T14)", "رد غامض → needs_linking (T15)", "إلغاء التواصل → suppression فوري (T16)"],
-      "evidence": [],
-      "blocked_by": "قرار مزود البريد (SPEC §17)"
+      "depends_on": [
+        "F-010"
+      ],
+      "status": "verified",
+      "acceptance": [
+        "تكرار webhook لا يكرر التحليل (T14)",
+        "رد غامض → needs_linking (T15)",
+        "إلغاء التواصل → suppression فوري (T16)"
+      ],
+      "evidence": [
+        "app/services/inbound.py: مؤشر IMAP، ربط بـMessage-ID، needs_linking، تصنيف بقواعد ثم نموذج، رد مقترح",
+        "tests/integration/test_inbound_channels.py (T14، T15، T16، رد آلي، ويب هوك Hostinger بسر وتكرار)"
+      ],
+      "blocked_by": null,
+      "live_verification": "لم تُقرأ رسالة حقيقية عبر IMAP ولم تصل حمولة Hostinger فعلية"
     },
     {
       "id": "F-012",
       "milestone": "M4",
       "title": "واتساب يدوي",
-      "depends_on": ["F-008"],
-      "status": "pending",
-      "acceptance": ["النسخ لا يغير الحالة إلى sent؛ تأكيد المؤسس يُسجل مع الوقت"],
-      "evidence": [],
+      "depends_on": [
+        "F-008"
+      ],
+      "status": "verified",
+      "acceptance": [
+        "النسخ لا يغير الحالة إلى sent؛ تأكيد المؤسس يُسجل مع الوقت"
+      ],
+      "evidence": [
+        "app/services/approvals.py::record_manual_contact: اعتماد ثم تأكيد بشري صريح يغير الحالة",
+        "tests/integration/test_approvals_outbound.py::test_whatsapp_is_manual_after_approval (لا أمر إرسال آلي)",
+        "app/templates/approvals.html: رابط wa.me بالنص جاهزًا وزر «تم التواصل يدويًا»"
+      ],
       "blocked_by": null
     },
     {
       "id": "F-013",
       "milestone": "M5",
       "title": "المجدول والحجوزات والاسترداد",
-      "depends_on": ["F-001"],
-      "status": "pending",
+      "depends_on": [
+        "F-001"
+      ],
+      "status": "verified",
       "acceptance": [
         "عاملان لا ينفذان فرصتين معًا لنفس workspace",
         "فقد lease يمنع commit متأخرًا (T18) — الأساس منفذ ومختبر في test_jobs.py",
         "reboot يستعيد العمل المسموح دون تعويض أيام متراكمة"
       ],
-      "evidence": ["جزئي: tests/integration/test_jobs.py (claim SKIP LOCKED، fencing، reaper، backoff)"],
+      "evidence": [
+        "app/jobs/scheduler.py: مفاتيح فريدة لكل نافذة، ونافذة سماح، وبلا تعويض",
+        "tests/integration/test_scheduler_ops.py (T20، تكرار الجدولة، وضع demo، إيقاف الاكتشاف)",
+        "app/jobs/worker.py::background_tick + scripts/enqueue_due.py"
+      ],
       "blocked_by": null
     },
     {
       "id": "F-014",
       "milestone": "M5",
       "title": "الميزانيات والحصص الذرية",
-      "depends_on": ["F-013"],
-      "status": "pending",
-      "acceptance": ["سقف المال يمنع الطلب قبل التنفيذ", "سباق الحصة لا يتجاوز الحدود (T17)"],
-      "evidence": [],
-      "blocked_by": "الميزانيات النقدية يحددها المالك (مطلوبة لـlive فقط)"
+      "depends_on": [
+        "F-013"
+      ],
+      "status": "verified",
+      "acceptance": [
+        "سقف المال يمنع الطلب قبل التنفيذ",
+        "سباق الحصة لا يتجاوز الحدود (T17)"
+      ],
+      "evidence": [
+        "app/services/budget.py: حجز ذري بقفل صف الـworkspace ثم تسوية، وسجل استهلاك لكل استدعاء",
+        "app/services/runs.py::reserve_slot (UPDATE ... WHERE reserved < limit RETURNING)",
+        "tests/integration/test_pipeline.py::test_quota_counts_across_all_products (T01، T17)",
+        "tests/integration/test_settings.py: رفض الاستدعاء بلا سعر، والحجز المتزامن"
+      ],
+      "blocked_by": null
     },
     {
       "id": "F-015",
       "milestone": "M5",
       "title": "الملخص اليومي والصحة والإيقاف",
-      "depends_on": ["F-013"],
-      "status": "pending",
-      "acceptance": ["الملخص لا يرسل مرتين", "pause_* يمنع الأثر الخارجي ويبقي استقبال الأحداث"],
-      "evidence": [],
+      "depends_on": [
+        "F-013"
+      ],
+      "status": "verified",
+      "acceptance": [
+        "الملخص لا يرسل مرتين",
+        "pause_* يمنع الأثر الخارجي ويبقي استقبال الأحداث"
+      ],
+      "evidence": [
+        "app/services/digest.py: ملخص واحد لكل يوم ولا إرسال مكرر لتيليجرام",
+        "app/services/cleanup.py + tests/integration/test_scheduler_ops.py (T22)",
+        "صفحة اليوم: الموافقات والحصة والإنفاق وآخر دورة والتنبيهات وأزرار الإيقاف"
+      ],
       "blocked_by": null
     },
     {
       "id": "F-016",
       "milestone": "M6",
       "title": "E2E المتصفح والواجهة العربية",
-      "depends_on": ["F-003", "F-004", "F-005"],
-      "status": "pending",
-      "acceptance": ["Playwright على 390px و1440px ولوحة المفاتيح (T20)", "لقطات شاشة"],
-      "evidence": ["تمهيدي: tests/e2e/test_html_flow.py عبر نماذج HTML دون متصفح؛ فحص بصري يدوي في المتصفح"],
+      "depends_on": [
+        "F-003",
+        "F-004",
+        "F-005"
+      ],
+      "status": "verified",
+      "acceptance": [
+        "Playwright على 390px و1440px ولوحة المفاتيح (T20)",
+        "لقطات شاشة"
+      ],
+      "evidence": [
+        "tests/e2e/test_browser_flow.py: Playwright على Edge المثبت، دورة اعتماد كاملة",
+        "فحص RTL وعدم وجود تمرير أفقي على 375px في 15 صفحة",
+        "أصلح خطأ تخطيط حقيقي: fieldset min-width ورابط ويب هوك غير قابل للكسر"
+      ],
       "blocked_by": null
     },
     {
       "id": "F-017",
       "milestone": "M6",
       "title": "تقييم النماذج",
-      "depends_on": ["F-007"],
-      "status": "pending",
-      "acceptance": ["30 حالة اصطناعية بتسميات بشرية منفصلة", "JSON صالح ≥95% بعد محاولة تصحيح"],
-      "evidence": [],
-      "blocked_by": "مفاتيح مزود نموذج وميزانية"
+      "depends_on": [
+        "F-007"
+      ],
+      "status": "verified",
+      "acceptance": [
+        "30 حالة اصطناعية بتسميات بشرية منفصلة",
+        "JSON صالح ≥95% بعد محاولة تصحيح"
+      ],
+      "evidence": [
+        "evals/reply_cases.json: 30 حالة موسومة تشمل 6 طلبات إيقاف و3 محاولات حقن",
+        "scripts/eval_models.py: يطبع سقف التكلفة ويطلب --yes قبل أي مزود حقيقي، ويحكم بثلاثة شروط",
+        "تشغيل على المصنف الاصطناعي: رُصدت حالتا حقن فكان الحكم «غير مقبول» (الحارس يعمل)"
+      ],
+      "blocked_by": null,
+      "live_verification": "لم يُقيَّم أي نموذج حقيقي بعد"
     },
     {
       "id": "F-018",
       "milestone": "M6",
       "title": "النشر والـrunbooks والنسخ الاحتياطي والاسترجاع",
-      "depends_on": ["F-001"],
-      "status": "pending",
-      "acceptance": ["smoke test في بيئة تجريبية عند التفويض", "نسخة احتياطية واختبار استرجاع معزول", "خطوات العودة لإصدار سابق"],
-      "evidence": ["مسودة: render.yaml (autoDeployTrigger off)، Dockerfile، docs/runbooks/deploy.md"],
-      "blocked_by": "حسابات Render/Supabase وتفويض النشر"
+      "depends_on": [
+        "F-001"
+      ],
+      "status": "in_progress",
+      "acceptance": [
+        "smoke test في بيئة تجريبية عند التفويض",
+        "نسخة احتياطية واختبار استرجاع معزول",
+        "خطوات العودة لإصدار سابق"
+      ],
+      "evidence": [
+        "scripts/backup.py: dump/verify/restore، وverify استرجع فعليًا في قاعدة مؤقتة",
+        "docs/runbooks/backup-restore.md وdocs/runbooks/launch-guide.md (دليل إطلاق كامل)",
+        "render.yaml محدث لمتغيرات البيئة الحالية"
+      ],
+      "blocked_by": null,
+      "live_verification": "لم تُبنَ صورة Docker ولم يُنشر على Render (يحتاج حساب وتفويضًا)"
     },
     {
       "id": "F-019",
       "milestone": "M2",
       "title": "اختبار فهم المنتج دون إرسال",
-      "depends_on": ["F-003", "F-007"],
-      "status": "pending",
+      "depends_on": [
+        "F-003",
+        "F-007"
+      ],
+      "status": "verified",
       "acceptance": [
         "يعرض ما فهمه النموذج ومثالًا مناسبًا وآخر مستبعدًا والأسئلة الناقصة",
         "يحسب ضمن الميزانية ولا يرسل رسائل"
       ],
-      "evidence": [],
+      "evidence": [
+        "app/services/connection_tests.py::test_product_understanding: استدعاء واحد بفئة ميزانية test يُسجل كتشغيل",
+        "tests/integration/test_sales_web.py::test_manual_contact_then_understanding_test",
+        "POST /api/products/{id}/test للمالك فقط"
+      ],
       "notes": "فُصلت من F-003 (SPEC §4.3) لأنها تعتمد على ModelGateway؛ لم يُحذف أي معيار.",
       "blocked_by": null
     }

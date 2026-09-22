@@ -5,7 +5,7 @@ envVarGroups:
   - name: sales-agent-shared
     envVars:
       - key: APP_ENV
-        value: staging
+        value: production
       - key: APP_TIMEZONE
         value: Asia/Riyadh
       - key: APP_BASE_URL
@@ -22,22 +22,18 @@ envVarGroups:
         sync: false
       - key: DATA_HASH_KEY
         sync: false
+      - key: SECRETS_ENCRYPTION_KEY
+        sync: false
+      - key: HOSTINGER_WEBHOOK_SECRET
+        sync: false
       - key: DEV_AUTH_ENABLED
         value: "false"
-      - key: SEARCH_PROVIDER
-        value: fake
-      - key: MODEL_PROVIDER
-        value: fake
-      - key: MAIL_PROVIDER
-        value: fake
+      # مفتاح الإيقاف العام: يبقى false حتى تقرر أنت الإرسال الحقيقي. قائمة السماح تحصر المستلمين أثناء التجربة.
       - key: OUTBOUND_ENABLED
         value: "false"
-      - key: DAILY_BUDGET_AMOUNT
+      - key: OUTBOUND_ALLOWLIST
         sync: false
-      - key: MONTHLY_BUDGET_AMOUNT
-        sync: false
-      - key: BUDGET_CURRENCY
-        value: USD
+      # مفاتيح النماذج والبريد وتيليجرام والبحث تُدخل من صفحة الإعدادات (مشفرة في القاعدة)؛ لا حاجة لها هنا.
 
 services:
   - type: web
