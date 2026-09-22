@@ -58,7 +58,7 @@
         "إضافة منتج لا تزيد الحصة اليومية"
       ],
       "evidence": [
-        "tests/integration/test_products.py (7 اختبارات)",
+        "tests/integration/test_products.py (6 اختبارات)",
         "tests/e2e/test_html_flow.py::test_full_owner_flow_through_forms (عبر نماذج HTML)"
       ],
       "notes": "زر «اختبار الفهم» مفصول إلى F-019 لأنه يعتمد على ModelGateway. الحصة ما زالت إعدادًا ثابتًا؛ فرضها ذريًا في F-006/F-014.",
