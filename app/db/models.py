@@ -525,6 +525,7 @@ class Contact(Base):
 
     __tablename__ = "contacts"
     __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
         _ws_fk("contacts", "company_id", "companies", ondelete="CASCADE"),
         CheckConstraint(check_in("channel", CONTACT_CHANNELS), name="channel"),
         UniqueConstraint("workspace_id", "company_id", "channel", "value_hash"),
@@ -616,3 +617,8 @@ class ImportRow(Base):
     match: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     action: Mapped[str] = mapped_column(String(30))
     result_company_id: Mapped[uuid.UUID | None] = mapped_column()
+
+
+# تسجيل جداول المراحل اللاحقة في metadata نفسها.
+from app.db import models_ops as _models_ops  # noqa: E402,F401
+from app.db import models_sales as _models_sales  # noqa: E402,F401

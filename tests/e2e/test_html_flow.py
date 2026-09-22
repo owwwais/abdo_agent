@@ -182,7 +182,12 @@ async def test_full_owner_flow_through_forms(
     assert detail.status_code == 200 and "غير معروفة" in detail.text
 
     settings_page = await c.get("/settings")
-    assert "FakeSearch اصطناعي" in settings_page.text and "معطل" in settings_page.text
+    assert (
+        "جاهزية التشغيل الفعلي" in settings_page.text
+        and "حدد الميزانية اليومية" in settings_page.text
+    )
+    for tab in ("models", "mail", "telegram", "search", "members"):
+        assert (await c.get(f"/settings?tab={tab}")).status_code == 200, tab
     today = await c.get("/")
     assert today.text.count("متوفر") == 3
 

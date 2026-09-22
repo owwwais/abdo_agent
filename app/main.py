@@ -27,6 +27,7 @@ from app.db.session import create_engine, loop_factory, make_sessionmaker
 from app.services.common import validation_details
 from app.web.pages import router as pages_router
 from app.web.render import render
+from app.web.settings_pages import router as settings_router
 
 log = logging.getLogger("app")
 STATIC_DIR = Path(__file__).parent / "static"
@@ -112,6 +113,7 @@ def create_app(settings: Settings | None = None, engine: AsyncEngine | None = No
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(api_router)
     app.include_router(pages_router)
+    app.include_router(settings_router)
     return app
 
 

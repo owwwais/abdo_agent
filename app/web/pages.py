@@ -28,12 +28,10 @@ from app.db.models import (
     Contact,
     ImportBatch,
     Job,
-    Membership,
     Product,
     Segment,
     Source,
     SourceSegment,
-    UserProfile,
     WorkerHeartbeat,
     Workspace,
 )
@@ -967,87 +965,3 @@ async def import_cancel(
             source=await db.get(Source, batch.source_id),
         )
     return RedirectResponse(f"/imports/{batch_id}?ok=import_canceled", status_code=303)
-
-
-# ---------------------------------------------------------------- الإعدادات والتشغيل
-
-
-@router.get("/settings", response_class=HTMLResponse)
-async def settings_page(
-    request: Request,
-    p: Principal = Depends(current_principal),
-    db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings_dep),
-) -> Response:
-    members = list(
-        (
-            await db.execute(
-                select(Membership, UserProfile)
-                .join(UserProfile, UserProfile.auth_user_id == Membership.auth_user_id)
-                .where(Membership.workspace_id == p.workspace_id)
-                .order_by(Membership.role, UserProfile.display_name)
-            )
-        ).tuples()
-    )
-    workers = list(
-        (
-            await db.execute(
-                select(WorkerHeartbeat).order_by(WorkerHeartbeat.last_seen_at.desc()).limit(5)
-            )
-        ).scalars()
-    )
-    failed_jobs = list(
-        (
-            await db.execute(
-                select(Job)
-                .where(Job.workspace_id == p.workspace_id, Job.status == "failed")
-                .order_by(Job.updated_at.desc())
-                .limit(10)
-            )
-        ).scalars()
-    )
-    integrations = [
-        (
-            "هوية المؤسسين (Supabase Auth)",
-            "مهيأ" if settings.supabase_configured else "غير مهيأ",
-            "دخول التطوير المحلي فقط" if not settings.supabase_configured else "التحقق عبر JWKS",
-        ),
-        (
-            "بحث الويب",
-            "FakeSearch اصطناعي"
-            if settings.search_provider == "fake"
-            else settings.search_provider,
-            "لم يُختر مزود حقيقي بعد",
-        ),
-        (
-            "النماذج اللغوية",
-            "FakeModel" if settings.model_provider == "fake" else settings.model_provider,
-            "تُبنى في M2",
-        ),
-        (
-            "البريد",
-            "FakeMailbox" if settings.mail_provider == "fake" else settings.mail_provider,
-            "تُبنى في M4",
-        ),
-        (
-            "تيليجرام",
-            "مهيأ" if settings.telegram_bot_token.get_secret_value() else "غير مهيأ",
-            "يُبنى في M3",
-        ),
-        ("الإرسال الخارجي", "مفعّل" if settings.outbound_enabled else "معطل", "يحتاج تفويضًا صريحًا"),
-        (
-            "جلب صفحات الويب لفحص المصادر",
-            "مفعّل" if settings.source_fetch_enabled else "معطل",
-            "SOURCE_FETCH_ENABLED",
-        ),
-    ]
-    return render(
-        request,
-        "settings.html",
-        members=members,
-        workers=workers,
-        failed_jobs=failed_jobs,
-        integrations=integrations,
-        workspace=await db.get(Workspace, p.workspace_id),
-        now=datetime.now(UTC),
-    )

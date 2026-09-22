@@ -215,7 +215,7 @@ async def test_fake_search_sample_is_labeled_synthetic(
 ) -> None:
     owner = await client_for(ws.owner)
     src = await create(owner, name="بحث", kind="web_search")
-    assert src["connector_key"] == "fake_search"
+    assert src["connector_key"] == "web_search"
     await owner.post(f"/api/sources/{src['id']}/test")
     await run_worker(sm)
     check = (await owner.get(f"/api/sources/{src['id']}")).json()["latest_check"]

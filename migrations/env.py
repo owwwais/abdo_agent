@@ -6,7 +6,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine, pool, text
 
-from app.db import models  # noqa: F401  تسجيل الجداول في metadata
+from app.db import models, models_ops, models_sales  # noqa: F401  تسجيل الجداول في metadata
 from app.db.base import SCHEMA, Base
 from app.db.session import normalize_db_url
 

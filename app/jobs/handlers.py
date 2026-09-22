@@ -18,6 +18,7 @@ from app.db.models import Source
 from app.jobs import queue
 from app.jobs.queue import Lease
 from app.services import sources as source_service
+from app.services.channels import ChannelNotReady, search_context
 
 
 @dataclass
@@ -43,8 +44,19 @@ async def source_sample(ctx: HandlerContext, lease: Lease) -> dict[str, Any] | N
         if src is None or src.workspace_id != lease.workspace_id:
             raise PermanentJobError("المصدر غير موجود")
         config = source_service.source_config(src)
+    search_client = None
+    if config.connector_key in ("web_search", "fake_search"):
+        async with ctx.sessionmaker() as db:
+            try:
+                search_client = (await search_context(db, ctx.settings, config.workspace_id)).client
+            except ChannelNotReady:
+                search_client = None
     connector = get_connector(
-        config.connector_key, ctx.settings, resolver=ctx.resolver, transport=ctx.transport
+        config.connector_key,
+        ctx.settings,
+        resolver=ctx.resolver,
+        transport=ctx.transport,
+        search=search_client,
     )
     started = time.monotonic()
     result = await connector.sample(config)

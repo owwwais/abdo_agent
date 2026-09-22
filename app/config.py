@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from decimal import Decimal
 from enum import StrEnum
 from functools import lru_cache
 from typing import Self
@@ -17,6 +16,8 @@ log = logging.getLogger(__name__)
 # قيم تطوير فقط؛ ممنوعة خارج demo/development/test (انظر _check_live_guards).
 _DEV_SESSION_SECRET = "dev-only-session-secret-not-for-real-use-000000"  # noqa: S105
 _DEV_DATA_HASH_KEY = "dev-only-data-hash-key-not-for-real-use-00000000"
+# مفتاح Fernet ثابت للتطوير المحلي فقط (base64 لـ32 بايت)؛ مرفوض خارج البيئات المحلية.
+_DEV_FERNET_KEY = "ZGV2LW9ubHktZmVybmV0LWtleS1ub3QtZm9yLXJlYWw="
 
 
 class AppEnv(StrEnum):
@@ -62,29 +63,43 @@ class Settings(BaseSettings):
 
     dev_auth_enabled: bool = False
 
+    # مفتاح/مفاتيح Fernet لتشفير الأسرار المحفوظة من صفحة الإعدادات (مفصولة بفواصل؛ الأول للتشفير
+    # والباقي لفك تشفير القديم أثناء التدوير). مطلوب خارج البيئات المحلية.
+    secrets_encryption_key: SecretStr = SecretStr("")
+
+    # مفتاح التحقق من ويب هوك بريد Hostinger (Agentic Mail → Webhooks). يُرسل كـ Bearer.
+    hostinger_webhook_secret: SecretStr = SecretStr("")
+
+    # قيم احتياطية اختيارية للتكاملات. ما يُحفظ من صفحة الإعدادات يتقدم عليها.
+    anthropic_api_key: SecretStr = SecretStr("")
+    openai_api_key: SecretStr = SecretStr("")
+    gemini_api_key: SecretStr = SecretStr("")
+    openai_compatible_api_key: SecretStr = SecretStr("")
+    openai_compatible_base_url: str = ""
+    brave_search_api_key: SecretStr = SecretStr("")
     telegram_bot_token: SecretStr = SecretStr("")
-    telegram_webhook_secret: SecretStr = SecretStr("")
-    telegram_allowed_chat_id: str = ""
+    telegram_chat_id: str = ""
+    smtp_host: str = ""
+    smtp_port: int | None = None
+    smtp_security: str = ""
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    imap_host: str = ""
+    imap_port: int | None = None
+    imap_username: str = ""
+    imap_password: SecretStr = SecretStr("")
+    mail_from_address: str = ""
+    mail_from_name: str = ""
 
-    search_provider: str = "fake"
-    search_api_key: SecretStr = SecretStr("")
-    model_provider: str = "fake"
-    model_extractor_id: str = ""
-    model_writer_id: str = ""
-    model_api_key: SecretStr = SecretStr("")
-    mail_provider: str = "fake"
-    mail_credential_ref: str = ""
+    # مفتاح إيقاف عام لكل إرسال خارجي. لا يُرسل أي بريد حقيقي إن لم يكن true، حتى بعد الاعتماد.
     outbound_enabled: bool = False
+    # قائمة سماح اختيارية للمستلمين (بريد أو @نطاق) مفصولة بفواصل؛ مفيدة في staging.
+    outbound_allowlist: str = ""
 
-    # جلب صفحات الويب العامة لاختبار المصادر. معطل افتراضيًا في demo/test.
+    # جلب صفحات الويب العامة لاختبار المصادر والإثراء. معطل افتراضيًا في demo/test.
     source_fetch_enabled: bool | None = None
     fetch_user_agent: str = "SalesResearchAgent/0.1 (source-check; contact via app owner)"
     fetch_allowed_ports: list[int] = Field(default_factory=lambda: [80, 443])
-
-    max_qualified_per_day: int = 3
-    daily_budget_amount: Decimal | None = None
-    monthly_budget_amount: Decimal | None = None
-    budget_currency: str = "USD"
 
     @model_validator(mode="after")
     def _apply_guards(self) -> Self:
@@ -95,6 +110,8 @@ class Settings(BaseSettings):
                 self.session_secret = SecretStr(_DEV_SESSION_SECRET)
             if not self.data_hash_key.get_secret_value():
                 self.data_hash_key = SecretStr(_DEV_DATA_HASH_KEY)
+            if not self.secrets_encryption_key.get_secret_value():
+                self.secrets_encryption_key = SecretStr(_DEV_FERNET_KEY)
         _check_live_guards(self)
         return self
 
@@ -107,14 +124,26 @@ class Settings(BaseSettings):
         return urlsplit(self.app_base_url).scheme == "https"
 
 
+def _valid_fernet_keys(raw: str) -> bool:
+    from cryptography.fernet import Fernet
+
+    try:
+        keys = [k.strip() for k in raw.split(",") if k.strip()]
+        for k in keys:
+            Fernet(k.encode())
+        return bool(keys)
+    except (ValueError, TypeError):
+        return False
+
+
 def _check_live_guards(s: Settings) -> None:
     problems: list[str] = []
-    if s.app_env == AppEnv.demo:
-        for name in ("search_provider", "model_provider", "mail_provider"):
-            if getattr(s, name) != "fake":
-                problems.append(f"{name.upper()} يجب أن يكون fake في بيئة demo")
-        if s.outbound_enabled:
-            problems.append("OUTBOUND_ENABLED ممنوع في بيئة demo")
+    if s.app_env == AppEnv.demo and s.outbound_enabled:
+        problems.append("OUTBOUND_ENABLED ممنوع في بيئة demo")
+    if not _valid_fernet_keys(s.secrets_encryption_key.get_secret_value()):
+        problems.append(
+            "SECRETS_ENCRYPTION_KEY ليس مفتاح Fernet صالحًا (ولّده بـ scripts/gen_secrets.py)"
+        )
     if not s.app_env.is_local:
         if s.dev_auth_enabled:
             problems.append("DEV_AUTH_ENABLED ممنوع خارج demo/development/test")
@@ -124,20 +153,14 @@ def _check_live_guards(s: Settings) -> None:
         hash_key = s.data_hash_key.get_secret_value()
         if len(hash_key) < 32 or hash_key == _DEV_DATA_HASH_KEY:
             problems.append("DATA_HASH_KEY مطلوب (32 حرفًا على الأقل) وليس قيمة التطوير")
+        if _DEV_FERNET_KEY in s.secrets_encryption_key.get_secret_value():
+            problems.append("SECRETS_ENCRYPTION_KEY لا يجوز أن يكون مفتاح التطوير")
         if not s.database_url:
             problems.append("DATABASE_URL مطلوب")
         if not s.supabase_configured:
             problems.append("SUPABASE_URL وSUPABASE_PUBLISHABLE_KEY مطلوبان")
         if not s.cookie_secure:
             problems.append("APP_BASE_URL يجب أن يستخدم https")
-        if s.daily_budget_amount is None or s.monthly_budget_amount is None:
-            problems.append(
-                "DAILY_BUDGET_AMOUNT وMONTHLY_BUDGET_AMOUNT مطلوبان خارج البيئات المحلية"
-            )
-    if s.app_env == AppEnv.production:
-        for name in ("search_provider", "model_provider", "mail_provider"):
-            if getattr(s, name) == "fake":
-                problems.append(f"{name.upper()}=fake ممنوع في production")
     if problems:
         raise ConfigError("إعداد غير صالح: " + "؛ ".join(problems))
 

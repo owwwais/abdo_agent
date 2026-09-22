@@ -105,17 +105,29 @@ async def test_duplicate_names_conflict(client_for: ClientFactory, ws: Workspace
 
 
 async def test_new_product_and_segment_do_not_raise_daily_quota(
-    client_for: ClientFactory, ws: WorkspaceFixture, settings: Settings
+    client_for: ClientFactory,
+    ws: WorkspaceFixture,
+    settings: Settings,
+    sm: async_sessionmaker[AsyncSession],
 ) -> None:
     """T01 (جزء M1): الحصة إعداد على مستوى workspace وليست لكل منتج؛ الإضافة لا تغيرها."""
+    from app.services import integrations as integ
+
     owner = await client_for(ws.owner)
-    before = settings.max_qualified_per_day
+    async with sm() as db:
+        before = (
+            await integ.get_config(db, settings, ws.id, "operations", integ.OperationsConfig)
+        ).max_qualified_per_day
     for i in range(3):
         seg = (await owner.post("/api/segments", json={"name": f"فئة {i}"})).json()
         await owner.post(
             "/api/products", json={"name": f"منتج {i}", "segments": [{"segment_id": seg["id"]}]}
         )
-    assert settings.max_qualified_per_day == before == 3
+    async with sm() as db:
+        after = (
+            await integ.get_config(db, settings, ws.id, "operations", integ.OperationsConfig)
+        ).max_qualified_per_day
+    assert before == after == 3
 
 
 async def test_archived_segment_does_not_count_for_activation(

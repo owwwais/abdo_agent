@@ -9,7 +9,8 @@ import httpx
 from app.config import Settings
 from app.connectors.base import SourceConnector
 from app.connectors.netguard import Resolver
-from app.connectors.simple import FakeSearchConnector, ManualConnector, UnconfiguredConnector
+from app.connectors.search import SearchClient, WebSearchConnector
+from app.connectors.simple import ManualConnector, UnconfiguredConnector
 from app.connectors.web import HtmlConnector, RssConnector
 
 
@@ -69,11 +70,8 @@ def connector_key_for(kind: str, settings: Settings) -> str:
     if kind == "rss":
         return "rss"
     if kind == "web_search":
-        return (
-            "fake_search"
-            if settings.search_provider == "fake"
-            else f"search:{settings.search_provider}"
-        )
+        # المزود الفعلي (اصطناعي أو Brave) يُحدد وقت التشغيل من صفحة الإعدادات.
+        return "web_search"
     return kind
 
 
@@ -83,6 +81,7 @@ def get_connector(
     *,
     resolver: Resolver | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
+    search: SearchClient | None = None,
 ) -> SourceConnector:
     if key == "manual":
         return ManualConnector()
@@ -90,18 +89,12 @@ def get_connector(
         return HtmlConnector(settings, resolver=resolver, transport=transport)
     if key == "rss":
         return RssConnector(settings, resolver=resolver, transport=transport)
-    if key == "fake_search":
-        if settings.app_env.value == "production":
+    if key in ("web_search", "fake_search"):
+        if search is None:
             return UnconfiguredConnector(
-                key, "FakeSearch ممنوع في production", "اضبط مزود بحث حقيقيًا"
+                key, "البحث على الويب غير مهيأ", "اختر المزود وأدخل مفتاحه في الإعدادات ← البحث"
             )
-        return FakeSearchConnector(settings)
-    if key.startswith("search:"):
-        return UnconfiguredConnector(
-            key,
-            f"مزود البحث «{key[7:]}» غير منفذ بعد",
-            "اختر المزود وحسابه وشروطه ثم أضف موصله (قرار مفتوح في SPEC §17)",
-        )
+        return WebSearchConnector(search)
     if key == "google_maps":
         return UnconfiguredConnector(
             key,

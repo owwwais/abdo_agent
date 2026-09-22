@@ -1,34 +1,328 @@
 {% extends "base.html" %}
-{% block title %}الإعدادات والتشغيل{% endblock %}
-{% block content %}
-<h1>الإعدادات والتشغيل</h1>
-<p class="lead">{{ workspace.name }} · المنطقة الزمنية <bdi dir="ltr">{{ workspace.timezone }}</bdi> · بيئة <bdi dir="ltr">{{ env }}</bdi></p>
-
-<section class="card">
-  <h2>التكاملات</h2>
-  <div class="table-wrap">
-    <table class="responsive">
-      <thead><tr><th>التكامل</th><th>الحالة</th><th>ملاحظة</th></tr></thead>
-      <tbody>
-      {% for name, state, note in integrations %}
-      <tr><td data-label="التكامل">{{ name }}</td><td data-label="الحالة">{{ state }}</td><td data-label="ملاحظة" class="muted small">{{ note }}</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
+{% block title %}الإعدادات والتكاملات{% endblock %}
+{% macro secret_field(key, hint="") %}
+  {% set st = secret_status[key] %}
+  <div class="field">
+    <label for="secret_{{ key }}">{{ secret_specs[key].label }}</label>
+    <input id="secret_{{ key }}" name="secret_{{ key }}" type="password" class="ltr" autocomplete="new-password" placeholder="{{ 'مضبوط — اتركه فارغًا للإبقاء عليه' if st != 'none' else 'أدخل القيمة' }}">
+    <span class="hint">
+      الحالة:
+      {% if st == "settings" %}<span class="badge tone-ok">مضبوط من هذه الصفحة (مشفر)</span>
+      {% elif st == "env" %}<span class="badge tone-info">مضبوط من ملف .env</span>
+      {% else %}<span class="badge tone-muted">غير مضبوط</span>{% endif %}
+      {{ hint }}
+    </span>
+    {% if st == "settings" %}<label class="check small"><input type="checkbox" name="delete_{{ key }}"> <span>حذف القيمة المحفوظة{% if secret_specs[key].env_attr %} (والرجوع إلى .env إن وُجدت){% endif %}</span></label>{% endif %}
   </div>
-  <p class="hint">الأسرار تُضبط في إدارة أسرار الاستضافة أو ملف ‎.env‎ المحلي، ولا تُدخل في هذه الواجهة.</p>
-</section>
+{% endmacro %}
+{% macro health_line(type_) %}
+  {% set h = health.get(type_, {}) %}
+  {% if h.get("checked_at") %}
+  <p class="small"><span class="badge tone-{{ 'ok' if h.ok else 'bad' }}">{{ "آخر اختبار ناجح" if h.ok else "آخر اختبار فشل" }}</span> {{ h.message }}</p>
+  {% else %}<p class="small muted">لم يُختبر بعد.</p>{% endif %}
+{% endmacro %}
+{% block content %}
+<h1>الإعدادات والتكاملات</h1>
+<p class="lead">{{ workspace.name }} · بيئة <bdi dir="ltr">{{ app_env }}</bdi> · وضع التشغيل: {{ "فعلي" if cfg_operations.operating_mode == "live" else "تجريبي" }}</p>
+{% if forced_fake %}<p class="notice notice-warn">بيئة demo: كل التكاملات تعمل اصطناعيًا مهما كان الإعداد، ولا يُنفق أي مبلغ ولا يُرسل أي بريد. للتشغيل الحقيقي اضبط APP_ENV=development أو production في ‎.env‎.</p>{% endif %}
+{% if ok_msg %}<p class="notice notice-ok" role="status">{{ ok_msg }}{% if tested_msg %} — {{ tested_msg }}{% endif %}</p>{% endif %}
 
+<nav class="tabs" aria-label="أقسام الإعدادات">
+  {% for key, text in tabs.items() %}<a href="/settings?tab={{ key }}" {% if tab == key %}aria-current="page"{% endif %}>{{ text }}</a>{% endfor %}
+</nav>
+
+{% if tab == "operations" %}
+{% set c = cfg_operations %}
+<section class="card">
+  <h2>جاهزية التشغيل الفعلي</h2>
+  {% if readiness.blockers %}<ul class="plain checklist">{% for b in readiness.blockers %}<li>{{ b }}</li>{% endfor %}</ul>{% else %}<p class="notice notice-ok">كل الشروط الأساسية متوفرة.</p>{% endif %}
+  {% if readiness.warnings %}<ul class="small muted">{% for w in readiness.warnings %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
+  <p class="small">الاستهلاك اليوم: <bdi dir="ltr">{{ usage.day_spent|float|round(4) }}</bdi> (+ محجوز <bdi dir="ltr">{{ usage.day_reserved|float|round(4) }}</bdi>) · هذا الشهر: <bdi dir="ltr">{{ usage.month_spent|float|round(4) }}</bdi> {{ c.currency }} — تقديري من التوكنات المسجلة وأسعارك، وليس فاتورة المزود.</p>
+</section>
+<section class="card">
+  <form class="stack" method="post" action="/settings/operations">
+    <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+    <input type="hidden" name="version" value="{{ ver_operations }}">
+    <fieldset>
+      <legend>وضع التشغيل</legend>
+      <label class="check"><input type="radio" name="operating_mode" value="demo" {% if c.operating_mode == "demo" %}checked{% endif %}> <span>تجريبي: لا دورات مجدولة ولا إنفاق</span></label>
+      <label class="check"><input type="radio" name="operating_mode" value="live" {% if c.operating_mode == "live" %}checked{% endif %}> <span>فعلي: الدورات المجدولة تعمل ضمن الميزانية، وكل رسالة تحتاج اعتمادكم</span></label>
+    </fieldset>
+    <fieldset>
+      <legend>الميزانية (مطلوبة لأي طلب مدفوع)</legend>
+      <div class="row">
+        <div class="field"><label for="daily_budget">يومية</label><input id="daily_budget" name="daily_budget" type="text" inputmode="decimal" class="ltr" value="{{ c.daily_budget if c.daily_budget is not none else '' }}"></div>
+        <div class="field"><label for="monthly_budget">شهرية</label><input id="monthly_budget" name="monthly_budget" type="text" inputmode="decimal" class="ltr" value="{{ c.monthly_budget if c.monthly_budget is not none else '' }}"></div>
+        <div class="field"><label for="currency">العملة</label><input id="currency" name="currency" type="text" class="ltr" maxlength="3" value="{{ c.currency }}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="discovery_daily_cap">سقف البحث اليومي</label><input id="discovery_daily_cap" name="discovery_daily_cap" type="text" class="ltr" value="{{ c.discovery_daily_cap if c.discovery_daily_cap is not none else '' }}"></div>
+        <div class="field"><label for="new_opportunity_daily_cap">سقف الفرص الجديدة</label><input id="new_opportunity_daily_cap" name="new_opportunity_daily_cap" type="text" class="ltr" value="{{ c.new_opportunity_daily_cap if c.new_opportunity_daily_cap is not none else '' }}"></div>
+        <div class="field"><label for="followup_daily_cap">سقف المتابعة والردود</label><input id="followup_daily_cap" name="followup_daily_cap" type="text" class="ltr" value="{{ c.followup_daily_cap if c.followup_daily_cap is not none else '' }}"></div>
+      </div>
+      <span class="hint">السقوف الفرعية اختيارية ولا تتجاوز السقف اليومي الكلي.</span>
+    </fieldset>
+    <fieldset>
+      <legend>الجدول والحدود (بتوقيت {{ workspace.timezone }})</legend>
+      <div class="row">
+        <div class="field"><label for="discovery_time">دورة الاكتشاف</label><input id="discovery_time" name="discovery_time" type="text" class="ltr" value="{{ c.discovery_time }}"></div>
+        <div class="field"><label for="process_slots">نوافذ معالجة الفرص</label><input id="process_slots" name="process_slots" type="text" class="ltr" value="{{ c.process_slots|join(', ') }}"></div>
+        <div class="field"><label for="digest_time">الملخص المسائي</label><input id="digest_time" name="digest_time" type="text" class="ltr" value="{{ c.digest_time }}"></div>
+        <div class="field"><label for="grace_hours">نافذة السماح (ساعات)</label><input id="grace_hours" name="grace_hours" type="number" min="1" max="12" value="{{ c.grace_hours }}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="max_qualified_per_day">فرص مؤهلة يوميًا (إجمالًا)</label><input id="max_qualified_per_day" name="max_qualified_per_day" type="number" min="1" max="10" value="{{ c.max_qualified_per_day }}"></div>
+        <div class="field"><label for="score_threshold">حد التأهيل (من 100)</label><input id="score_threshold" name="score_threshold" type="number" min="0" max="100" value="{{ c.score_threshold }}"></div>
+        <div class="field"><label for="first_contact_cooldown_days">مهلة التواصل الأول (أيام)</label><input id="first_contact_cooldown_days" name="first_contact_cooldown_days" type="number" min="0" max="365" value="{{ c.first_contact_cooldown_days }}"></div>
+        <div class="field"><label for="approval_expiry_hours">صلاحية الاعتماد (ساعات)</label><input id="approval_expiry_hours" name="approval_expiry_hours" type="number" min="1" max="720" value="{{ c.approval_expiry_hours }}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="max_model_calls_per_opportunity">استدعاءات النموذج لكل فرصة</label><input id="max_model_calls_per_opportunity" name="max_model_calls_per_opportunity" type="number" min="2" max="10" value="{{ c.max_model_calls_per_opportunity }}"></div>
+        <div class="field"><label for="max_enrichment_pages">صفحات الإثراء لكل فرصة</label><input id="max_enrichment_pages" name="max_enrichment_pages" type="number" min="0" max="10" value="{{ c.max_enrichment_pages }}"></div>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>الإيقاف</legend>
+      <label class="check"><input type="checkbox" name="pause_discovery" {% if c.pause_discovery %}checked{% endif %}> <span>إيقاف البحث الجديد</span></label>
+      <label class="check"><input type="checkbox" name="pause_outbound" {% if c.pause_outbound %}checked{% endif %}> <span>إيقاف كل الرسائل الخارجية</span></label>
+      <label class="check"><input type="checkbox" name="pause_all_processing" {% if c.pause_all_processing %}checked{% endif %}> <span>إيقاف كل معالجة بالنماذج</span></label>
+      <span class="hint">استقبال الردود وطلبات إيقاف التواصل يبقى فعالًا دائمًا.</span>
+    </fieldset>
+    <div class="actions"><button class="btn" type="submit">حفظ</button></div>
+  </form>
+</section>
+{% endif %}
+
+{% if tab == "models" %}
+{% set c = cfg_models %}
+{% set available = health.get("models", {}).get("available", {}) %}
+<section class="card">
+  <h2>مفاتيح المزودين</h2>
+  <p class="hint">اختر أي نموذج تريده لكل دور. المفاتيح تُحفظ مشفرة ولا تظهر مجددًا.</p>
+  {{ health_line("models") }}
+  <form class="stack" method="post" action="/settings/models" id="models-form">
+    <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+    <input type="hidden" name="version" value="{{ ver_models }}">
+    <div class="row">
+      {{ secret_field("anthropic_api_key") }}
+      {{ secret_field("openai_api_key") }}
+    </div>
+    <div class="row">
+      {{ secret_field("gemini_api_key") }}
+      {{ secret_field("openai_compatible_api_key", "(OpenRouter أو أي مزود متوافق)") }}
+    </div>
+    <div class="row">
+      <div class="field"><label for="openai_compatible_base_url">رابط المزود المتوافق</label><input id="openai_compatible_base_url" name="openai_compatible_base_url" type="url" class="ltr" placeholder="https://openrouter.ai/api/v1" value="{{ c.openai_compatible_base_url }}"></div>
+      <div class="field"><label for="openai_compatible_name">اسمه (للعرض)</label><input id="openai_compatible_name" name="openai_compatible_name" type="text" value="{{ c.openai_compatible_name }}"></div>
+    </div>
+    {% for role, role_label, role_hint in [("extractor", "دور الاستخراج", "تخطيط البحث وتصنيف الردود"), ("writer", "دور التأهيل والصياغة", "تقييم الفرص وكتابة الرسائل")] %}
+    {% set r = c.extractor if role == "extractor" else c.writer %}
+    {% set price = c.price_for(r.provider, r.model) %}
+    {% set sugg = suggested_prices.get(r.provider ~ ":" ~ r.model) %}
+    <fieldset>
+      <legend>{{ role_label }} <span class="hint">({{ role_hint }})</span></legend>
+      <div class="row">
+        <div class="field">
+          <label for="{{ role }}_provider">المزود</label>
+          <select id="{{ role }}_provider" name="{{ role }}_provider">
+            {% for pv, pl in [("fake", "اصطناعي (بلا تكلفة)"), ("anthropic", "Anthropic Claude"), ("openai", "OpenAI"), ("gemini", "Google Gemini"), ("openai_compatible", "مزود متوافق مع OpenAI")] %}
+            <option value="{{ pv }}" {% if r.provider == pv %}selected{% endif %}>{{ pl }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="{{ role }}_model">النموذج</label>
+          <input id="{{ role }}_model" name="{{ role }}_model" type="text" class="ltr" list="models-{{ role }}" value="{{ r.model }}" placeholder="مثل claude-opus-5">
+          <datalist id="models-{{ role }}">
+            {% for pv, ids in available.items() %}{% for mid in ids %}<option value="{{ mid }}">{{ pv }}</option>{% endfor %}{% endfor %}
+            {% if not available %}<option value="claude-opus-5"></option><option value="claude-sonnet-5"></option><option value="claude-haiku-4-5"></option>{% endif %}
+          </datalist>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="{{ role }}_price_in">سعر المدخلات لكل مليون توكن</label><input id="{{ role }}_price_in" name="{{ role }}_price_in" type="text" class="ltr" value="{{ price.input_per_mtok if price else (sugg[0] if sugg else '') }}"></div>
+        <div class="field"><label for="{{ role }}_price_out">سعر المخرجات لكل مليون توكن</label><input id="{{ role }}_price_out" name="{{ role }}_price_out" type="text" class="ltr" value="{{ price.output_per_mtok if price else (sugg[1] if sugg else '') }}"></div>
+      </div>
+      <span class="hint">{% if price %}السعر المعتمد: إصدار {{ price.pricing_version }}.{% elif sugg %}القيم المعبأة هي أسعار Anthropic المعلنة؛ راجعها ثم احفظ.{% else %}بلا سعر لا يُستدعى النموذج (لا طلبات بتكلفة مجهولة).{% endif %}</span>
+    </fieldset>
+    {% endfor %}
+    <div class="row">
+      <div class="field"><label for="price_currency">عملة الأسعار</label><input id="price_currency" name="price_currency" type="text" class="ltr" maxlength="3" value="USD"></div>
+      <div class="field"><label for="max_output_tokens">أقصى توكنات للرد</label><input id="max_output_tokens" name="max_output_tokens" type="number" min="256" max="16000" value="{{ c.max_output_tokens }}"></div>
+    </div>
+    <label class="check"><input type="checkbox" name="processing_approved" {% if c.processing_approved %}checked{% endif %}> <span>راجعنا سياسة معالجة البيانات ومنطقتها لدى المزودين المختارين، ونقبل إرسال بيانات الشركات العامة والأدلة إليهم.</span></label>
+    <div class="field"><label for="processing_note">ملاحظة الاعتماد</label><input id="processing_note" name="processing_note" type="text" value="{{ c.processing_note }}"></div>
+    <div class="actions"><button class="btn" type="submit">حفظ</button></div>
+  </form>
+</section>
+<section class="card">
+  <h2>جلب النماذج المتاحة واختبارها</h2>
+  <div class="actions">
+    {% for pv, pl in [("anthropic", "Anthropic"), ("openai", "OpenAI"), ("gemini", "Gemini"), ("openai_compatible", "المتوافق")] %}
+    <form method="post" action="/settings/models/fetch"><input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}"><input type="hidden" name="provider" value="{{ pv }}"><button class="btn btn-secondary" type="submit" {% if secret_status[pv ~ '_api_key'] == 'none' %}disabled aria-disabled="true"{% endif %}>جلب نماذج {{ pl }}</button></form>
+    {% endfor %}
+  </div>
+  <div class="actions">
+    {% for role in ["extractor", "writer"] %}
+    <form method="post" action="/settings/models/test"><input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}"><input type="hidden" name="role" value="{{ role }}"><button class="btn btn-secondary" type="submit">اختبار دور {{ "الاستخراج" if role == "extractor" else "التأهيل والصياغة" }}</button></form>
+    {% endfor %}
+  </div>
+  <p class="hint">الاختبار استدعاء صغير جدًا (≤600 توكن) يُسجل في الاستهلاك. جلب القائمة مجاني.</p>
+</section>
+{% endif %}
+
+{% if tab == "mail" %}
+{% set c = cfg_mail %}
+<section class="card">
+  <h2>البريد</h2>
+  {{ health_line("mail") }}
+  {% if not outbound_enabled %}<p class="notice notice-warn">OUTBOUND_ENABLED=false في ‎.env‎: يمكن الاختبار، لكن لن تُرسل رسائل العملاء حتى تفعّله صراحة.</p>{% endif %}
+  <form class="stack" method="post" action="/settings/mail">
+    <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+    <input type="hidden" name="version" value="{{ ver_mail }}">
+    <fieldset>
+      <legend>المزود</legend>
+      <label class="check"><input type="radio" name="provider" value="fake" {% if c.provider == "fake" %}checked{% endif %}> <span>اصطناعي (لا إرسال)</span></label>
+      <label class="check"><input type="radio" name="provider" value="smtp" {% if c.provider == "smtp" %}checked{% endif %}> <span>SMTP + IMAP</span></label>
+      <label class="check"><input type="radio" name="preset" value="hostinger" {% if c.preset == "hostinger" %}checked{% endif %}> <span>Hostinger — ربط تلقائي: <bdi dir="ltr">smtp.hostinger.com:465 SSL</bdi> و<bdi dir="ltr">imap.hostinger.com:993</bdi></span></label>
+      <label class="check"><input type="radio" name="preset" value="custom" {% if c.preset == "custom" %}checked{% endif %}> <span>خادم آخر (أدخل الإعدادات يدويًا)</span></label>
+    </fieldset>
+    <div class="row">
+      <div class="field"><label for="smtp_username">البريد (اسم المستخدم)</label><input id="smtp_username" name="smtp_username" type="email" class="ltr" value="{{ c.smtp_username }}" placeholder="sales@yourdomain.com"></div>
+      {{ secret_field("smtp_password") }}
+    </div>
+    <div class="row">
+      <div class="field"><label for="from_name">اسم المرسل</label><input id="from_name" name="from_name" type="text" value="{{ c.from_name }}"></div>
+      <div class="field"><label for="from_address">عنوان المرسل</label><input id="from_address" name="from_address" type="email" class="ltr" value="{{ c.from_address }}"></div>
+      <div class="field"><label for="reply_to">الرد إلى (اختياري)</label><input id="reply_to" name="reply_to" type="email" class="ltr" value="{{ c.reply_to }}"></div>
+    </div>
+    <details>
+      <summary>إعدادات خادم مخصص</summary>
+      <div class="row">
+        <div class="field"><label for="smtp_host">SMTP host</label><input id="smtp_host" name="smtp_host" type="text" class="ltr" value="{{ c.smtp_host }}"></div>
+        <div class="field"><label for="smtp_port">SMTP port</label><input id="smtp_port" name="smtp_port" type="number" value="{{ c.smtp_port }}"></div>
+        <div class="field"><label for="smtp_security">الأمان</label><select id="smtp_security" name="smtp_security"><option value="ssl" {% if c.smtp_security == "ssl" %}selected{% endif %}>SSL</option><option value="starttls" {% if c.smtp_security == "starttls" %}selected{% endif %}>STARTTLS</option></select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="imap_host">IMAP host</label><input id="imap_host" name="imap_host" type="text" class="ltr" value="{{ c.imap_host }}"></div>
+        <div class="field"><label for="imap_port">IMAP port</label><input id="imap_port" name="imap_port" type="number" value="{{ c.imap_port }}"></div>
+      </div>
+    </details>
+    <fieldset>
+      <legend>الردود الواردة</legend>
+      <label class="check"><input type="checkbox" name="imap_enabled" {% if c.imap_enabled %}checked{% endif %}> <span>قراءة الردود عبر IMAP وحفظ نسخة من المرسل</span></label>
+      <label class="check"><input type="checkbox" name="imap_same_password" {% if c.imap_same_password %}checked{% endif %}> <span>IMAP بنفس اسم المستخدم وكلمة المرور</span></label>
+      <div class="row">
+        <div class="field"><label for="imap_username">مستخدم IMAP (إن اختلف)</label><input id="imap_username" name="imap_username" type="text" class="ltr" value="{{ c.imap_username if c.imap_username != c.smtp_username else '' }}"></div>
+        {{ secret_field("imap_password", "(فقط إن اختلفت)") }}
+      </div>
+      <div class="row">
+        <div class="field"><label for="imap_folder">مجلد الوارد</label><input id="imap_folder" name="imap_folder" type="text" class="ltr" value="{{ c.imap_folder }}"></div>
+        <div class="field"><label for="sent_folder">مجلد المرسل (فارغ = اكتشاف تلقائي)</label><input id="sent_folder" name="sent_folder" type="text" class="ltr" value="{{ c.sent_folder }}"></div>
+        <div class="field"><label for="sync_interval_minutes">المزامنة الاحتياطية كل (دقائق)</label><input id="sync_interval_minutes" name="sync_interval_minutes" type="number" min="2" max="120" value="{{ c.sync_interval_minutes }}"></div>
+      </div>
+      <label class="check"><input type="radio" name="inbound_mode" value="webhook_and_imap" {% if c.inbound_mode == "webhook_and_imap" %}checked{% endif %}> <span>ويب هوك Hostinger يوقظ المزامنة فورًا + مزامنة دورية احتياطية</span></label>
+      <label class="check"><input type="radio" name="inbound_mode" value="imap_poll" {% if c.inbound_mode == "imap_poll" %}checked{% endif %}> <span>مزامنة دورية فقط</span></label>
+      <div class="notice notice-info small">
+        رابط الويب هوك لإضافته في hPanel ← Emails ← Agentic mail ← Webhooks (الحدث message.received):
+        <bdi dir="ltr">{{ base_url }}/webhooks/email/hostinger</bdi>.
+        يحتاج رابطًا عامًا بـhttps؛ محليًا تكفي المزامنة الدورية. انسخ السر الذي يعرضه Hostinger مرة واحدة إلى الحقل التالي أو إلى HOSTINGER_WEBHOOK_SECRET في ‎.env‎.
+      </div>
+      {{ secret_field("hostinger_webhook_secret") }}
+    </fieldset>
+    <fieldset>
+      <legend>المحتوى والحدود</legend>
+      <div class="field"><label for="signature">التوقيع</label><textarea id="signature" name="signature">{{ c.signature }}</textarea></div>
+      <div class="field"><label for="opt_out_line">سطر إيقاف التواصل</label><input id="opt_out_line" name="opt_out_line" type="text" value="{{ c.opt_out_line }}"></div>
+      <div class="row">
+        <div class="field"><label for="booking_link">رابط حجز موعد معتمد (اختياري)</label><input id="booking_link" name="booking_link" type="url" class="ltr" value="{{ c.booking_link }}"></div>
+        <div class="field"><label for="daily_send_limit">حد الإرسال اليومي</label><input id="daily_send_limit" name="daily_send_limit" type="number" min="1" max="500" value="{{ c.daily_send_limit }}"></div>
+      </div>
+    </fieldset>
+    <div class="actions"><button class="btn" type="submit">حفظ</button></div>
+  </form>
+</section>
+<section class="card">
+  <h2>اختبار</h2>
+  <div class="actions">
+    <form method="post" action="/settings/mail/test"><input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}"><button class="btn btn-secondary" type="submit">اختبار تسجيل الدخول (SMTP وIMAP)</button></form>
+    <form method="post" action="/settings/mail/test"><input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}"><input type="hidden" name="action" value="send"><button class="btn btn-secondary" type="submit">إرسال رسالة اختبار إلى بريدي (<bdi dir="ltr">{{ principal.email }}</bdi>)</button></form>
+  </div>
+</section>
+{% endif %}
+
+{% if tab == "telegram" %}
+{% set c = cfg_telegram %}
+<section class="card">
+  <h2>تيليجرام</h2>
+  {{ health_line("telegram") }}
+  <ol class="small">
+    <li>أنشئ بوتًا عبر @BotFather وانسخ الرمز.</li>
+    <li>أضف البوت إلى مجموعة المؤسسين. لكي يرى البوت الرسائل العادية عطّل Privacy Mode في BotFather، أو اكتفوا بالأوامر والأزرار.</li>
+    <li>معرف المجموعة رقم يبدأ غالبًا بـ <bdi dir="ltr">-100</bdi>.</li>
+    <li>كل مؤسس يربط حسابه من تبويب «الأعضاء والنظام» ليُقبل اعتماده من تيليجرام.</li>
+  </ol>
+  <form class="stack" method="post" action="/settings/telegram">
+    <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+    <input type="hidden" name="version" value="{{ ver_telegram }}">
+    <label class="check"><input type="checkbox" name="enabled" {% if c.enabled %}checked{% endif %}> <span>تفعيل تيليجرام</span></label>
+    <div class="row">
+      {{ secret_field("telegram_bot_token") }}
+      <div class="field"><label for="chat_id">معرف المجموعة</label><input id="chat_id" name="chat_id" type="text" class="ltr" value="{{ c.chat_id }}"></div>
+    </div>
+    <p class="small">الوضع الحالي: {{ "ويب هوك" if c.mode == "webhook" else "polling (العامل يسحب التحديثات)" }}{% if c.webhook_url %} — <bdi dir="ltr">{{ c.webhook_url }}</bdi>{% endif %}</p>
+    <div class="actions"><button class="btn" type="submit">حفظ</button></div>
+  </form>
+</section>
+<section class="card">
+  <h2>اختبار وربط</h2>
+  <div class="actions">
+    <form method="post" action="/settings/telegram/test"><input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}"><button class="btn btn-secondary" type="submit">اختبار البوت</button></form>
+    <form method="post" action="/settings/telegram/test"><input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}"><input type="hidden" name="action" value="send"><button class="btn btn-secondary" type="submit">إرسال رسالة اختبار للمجموعة</button></form>
+    <form method="post" action="/settings/telegram/webhook"><input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}"><button class="btn btn-secondary" type="submit">ربط الويب هوك (يحتاج https)</button></form>
+    {% if c.mode == "webhook" %}<form method="post" action="/settings/telegram/webhook"><input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}"><input type="hidden" name="action" value="delete"><button class="btn btn-quiet" type="submit">الرجوع إلى polling</button></form>{% endif %}
+  </div>
+</section>
+{% endif %}
+
+{% if tab == "search" %}
+{% set c = cfg_search %}
+<section class="card">
+  <h2>البحث على الويب</h2>
+  {{ health_line("search") }}
+  <form class="stack" method="post" action="/settings/search">
+    <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
+    <input type="hidden" name="version" value="{{ ver_search }}">
+    <label class="check"><input type="radio" name="provider" value="fake" {% if c.provider == "fake" %}checked{% endif %}> <span>اصطناعي (FakeSearch)</span></label>
+    <label class="check"><input type="radio" name="provider" value="brave" {% if c.provider == "brave" %}checked{% endif %}> <span>Brave Search API</span></label>
+    {{ secret_field("brave_api_key") }}
+    <div class="row">
+      <div class="field"><label for="country">الدولة</label><input id="country" name="country" type="text" class="ltr" maxlength="2" value="{{ c.country }}"></div>
+      <div class="field"><label for="search_lang">لغة النتائج</label><input id="search_lang" name="search_lang" type="text" class="ltr" value="{{ c.search_lang }}"></div>
+      <div class="field"><label for="max_queries">استعلامات لكل دورة</label><input id="max_queries" name="max_queries" type="number" min="1" max="5" value="{{ c.max_queries }}"></div>
+      <div class="field"><label for="max_candidates">مرشحون لكل دورة</label><input id="max_candidates" name="max_candidates" type="number" min="1" max="50" value="{{ c.max_candidates }}"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label for="price_per_1k_requests">سعر كل 1000 طلب في خطتك</label><input id="price_per_1k_requests" name="price_per_1k_requests" type="text" class="ltr" value="{{ c.price_per_1k_requests if c.price_per_1k_requests is not none else '' }}"></div>
+      <div class="field"><label for="s_currency">العملة</label><input id="s_currency" name="currency" type="text" class="ltr" maxlength="3" value="{{ c.currency }}"></div>
+    </div>
+    <div class="actions"><button class="btn" type="submit">حفظ</button></div>
+  </form>
+  <form method="post" action="/settings/search/test"><input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}"><button class="btn btn-secondary" type="submit">اختبار (طلب واحد)</button></form>
+</section>
+{% endif %}
+
+{% if tab == "members" %}
 <section class="card">
   <h2>الأعضاء</h2>
   <ul class="plain">
     {% for m, u in members %}
-    <li>{{ u.display_name }} · <bdi dir="ltr">{{ u.email }}</bdi> · {{ label("role", m.role) }} · {{ "فعالة" if m.status == "active" else "معطلة" }}{% if u.is_dev_fixture %} <span class="badge tone-muted">fixture تطوير</span>{% endif %}</li>
+    <li>{{ u.display_name }} · <bdi dir="ltr">{{ u.email }}</bdi> · {{ label("role", m.role) }} · {{ "فعالة" if m.status == "active" else "معطلة" }}{% if u.telegram_user_id %} · <span class="badge tone-ok">تيليجرام مربوط</span>{% endif %}{% if u.is_dev_fixture %} <span class="badge tone-muted">fixture تطوير</span>{% endif %}</li>
     {% endfor %}
   </ul>
-  <p class="hint">إضافة الأعضاء حاليًا عبر سكربت (docs/runbooks/members.md)؛ شاشة إدارة الأعضاء لاحقًا.</p>
+  <form method="post" action="/settings/telegram/link-code"><input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}"><button class="btn btn-secondary" type="submit">{{ "إعادة ربط" if my_telegram_id else "ربط" }} حسابي في تيليجرام</button></form>
+  <p class="hint">إضافة عضو جديد: ادعُه من Supabase ثم اربطه بـ scripts/add_member.py (docs/runbooks/members.md).</p>
 </section>
-
 <section class="card">
   <h2>العامل والمهام</h2>
   <ul class="plain">
@@ -36,9 +330,7 @@
     <li><bdi dir="ltr">{{ w.worker_id }}</bdi> · آخر نبضة {{ w.last_seen_at | dt }}{% if w.stopped_at %} · <span class="badge tone-muted">متوقف</span>{% elif (now - w.last_seen_at).total_seconds() > 120 %} · <span class="badge tone-bad">لا نبض</span>{% else %} · <span class="badge tone-ok">يعمل</span>{% endif %}</li>
     {% else %}<li class="muted">لم يعمل أي عامل بعد.</li>{% endfor %}
   </ul>
-  {% if failed_jobs %}
-  <h3>مهام فشلت</h3>
-  <ul>{% for j in failed_jobs %}<li><bdi dir="ltr">{{ j.kind }}</bdi> · {{ j.updated_at | dt }} · {{ j.last_error or "" }}</li>{% endfor %}</ul>
-  {% endif %}
+  {% if failed_jobs %}<h3>مهام فشلت</h3><ul>{% for j in failed_jobs %}<li><bdi dir="ltr">{{ j.kind }}</bdi> · {{ j.updated_at | dt }} · {{ j.last_error or "" }}</li>{% endfor %}</ul>{% endif %}
 </section>
+{% endif %}
 {% endblock %}

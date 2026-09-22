@@ -200,7 +200,7 @@ class _WebBase:
             request_count=fetcher.request_count,
             bytes_fetched=fetcher.bytes_total,
             cost_amount=Decimal("0"),
-            cost_currency=self.settings.budget_currency,
+            cost_currency="USD",
             retention_note=(
                 "تُحفظ الحقول المستخرجة فقط" if not config.store_raw else "مسموح حفظ المحتوى الخام"
             ),

@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from app.config import Settings
-from app.connectors.base import SampleRecord, SampleResult, SourceConfig, ValidationReport
+from app.connectors.base import SampleResult, SourceConfig, ValidationReport
 
 
 class ManualConnector:
@@ -57,45 +56,6 @@ _FAKE_RESULTS = (
         "email": "info@nakheel-stays.example",
     },
 )
-
-
-class FakeSearchConnector:
-    """موصل بحث اصطناعي للتطوير والاختبار فقط. لا يُستخدم في production (حاجز الإعداد)."""
-
-    key = "fake_search"
-
-    def __init__(self, settings: Settings) -> None:
-        self.settings = settings
-
-    async def validate(self, config: SourceConfig) -> ValidationReport:
-        return ValidationReport(
-            status="succeeded",
-            code="synthetic",
-            message="موصل بحث اصطناعي (FakeSearch)؛ النتائج ليست بيانات حقيقية",
-        )
-
-    async def sample(self, config: SourceConfig) -> SampleResult:
-        records = [
-            SampleRecord(source_record_id=r["website"], url=r["website"], fields=dict(r))
-            for r in _FAKE_RESULTS[: config.max_records]
-        ]
-        found = sorted({k for r in records for k in r.fields})
-        return SampleResult(
-            status="succeeded",
-            code="synthetic",
-            message=f"عينة اصطناعية من FakeSearch: {len(records)} سجل (ليست بيانات حقيقية)",
-            records=records,
-            fields_found=found,
-            fields_missing=[
-                f
-                for f in ("name", "description", "website", "phone", "email", "category")
-                if f not in found
-            ],
-            request_count=0,
-            cost_amount=Decimal("0"),
-            cost_currency=self.settings.budget_currency,
-            synthetic=True,
-        )
 
 
 class UnconfiguredConnector:
