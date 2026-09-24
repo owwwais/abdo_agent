@@ -293,9 +293,16 @@
   <form class="stack" method="post" action="/settings/search">
     <input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}">
     <input type="hidden" name="version" value="{{ ver_search }}">
-    <label class="check"><input type="radio" name="provider" value="fake" {% if c.provider == "fake" %}checked{% endif %}> <span>اصطناعي (FakeSearch)</span></label>
-    <label class="check"><input type="radio" name="provider" value="brave" {% if c.provider == "brave" %}checked{% endif %}> <span>Brave Search API</span></label>
-    {{ secret_field("brave_api_key") }}
+    <fieldset>
+      <legend>مزود البحث على الويب</legend>
+      <label class="check"><input type="radio" name="provider" value="fake" {% if c.provider == "fake" %}checked{% endif %}> <span>اصطناعي (للتجربة)</span></label>
+      <label class="check"><input type="radio" name="provider" value="tavily" {% if c.provider == "tavily" %}checked{% endif %}> <span>Tavily — 1000 طلب مجاني شهريًا بلا بطاقة (السعر: 0)</span></label>
+      <label class="check"><input type="radio" name="provider" value="brave" {% if c.provider == "brave" %}checked{% endif %}> <span>Brave Search — رصيد 5$ شهريًا ≈ 1000 طلب، بطاقة للتحقق (السعر: 5)</span></label>
+      <div class="row">
+        {{ secret_field("tavily_api_key", "من app.tavily.com") }}
+        {{ secret_field("brave_api_key", "من api-dashboard.search.brave.com") }}
+      </div>
+    </fieldset>
     <div class="row">
       <div class="field"><label for="country">الدولة</label><input id="country" name="country" type="text" class="ltr" maxlength="2" value="{{ c.country }}"></div>
       <div class="field"><label for="search_lang">لغة النتائج</label><input id="search_lang" name="search_lang" type="text" class="ltr" value="{{ c.search_lang }}"></div>
@@ -306,9 +313,25 @@
       <div class="field"><label for="price_per_1k_requests">سعر كل 1000 طلب في خطتك</label><input id="price_per_1k_requests" name="price_per_1k_requests" type="text" class="ltr" value="{{ c.price_per_1k_requests if c.price_per_1k_requests is not none else '' }}"></div>
       <div class="field"><label for="s_currency">العملة</label><input id="s_currency" name="currency" type="text" class="ltr" maxlength="3" value="{{ c.currency }}"></div>
     </div>
+    <fieldset>
+      <legend>خرائط Google (Places API New)</legend>
+      <p class="hint">لمصادر من نوع «خرائط Google». الطلب يعيد حتى 20 منشأة. نحفظ <strong>معرف المكان فقط</strong> كما تشترط Google، ونقرأ الاسم والوصف والتواصل من موقع المنشأة نفسها؛ المنشأة بلا موقع إلكتروني تُعد ولا تُحفظ. أول 1000 طلب شهريًا مجانية (فئة Enterprise لأننا نطلب رابط الموقع)، ثم تُحسب بسعر خطتك.</p>
+      <label class="check"><input type="radio" name="maps_provider" value="fake" {% if c.maps_provider == "fake" %}checked{% endif %}> <span>غير مفعلة (أماكن اصطناعية في بيئة demo فقط)</span></label>
+      <label class="check"><input type="radio" name="maps_provider" value="google" {% if c.maps_provider == "google" %}checked{% endif %}> <span>Google Places API</span></label>
+      <div class="row">
+        {{ secret_field("google_maps_api_key", "Google Cloud ← APIs & Services ← Credentials؛ فعّل Places API (New) وقيّد المفتاح عليها") }}
+        <div class="field"><label for="maps_results_per_query">منشآت لكل استعلام</label><input id="maps_results_per_query" name="maps_results_per_query" type="number" min="1" max="20" value="{{ c.maps_results_per_query }}"></div>
+        <div class="field"><label for="maps_price_per_1k_requests">سعر كل 1000 طلب (0 ضمن الحصة المجانية)</label><input id="maps_price_per_1k_requests" name="maps_price_per_1k_requests" type="text" class="ltr" value="{{ c.maps_price_per_1k_requests if c.maps_price_per_1k_requests is not none else '' }}"></div>
+      </div>
+    </fieldset>
     <div class="actions"><button class="btn" type="submit">حفظ</button></div>
   </form>
-  <form method="post" action="/settings/search/test"><input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}"><button class="btn btn-secondary" type="submit">اختبار (طلب واحد)</button></form>
+  {% set mh = health.get("search", {}).get("maps", {}) %}
+  {% if mh.get("checked_at") %}<p class="small">خرائط Google: <span class="badge tone-{{ 'ok' if mh.ok else 'bad' }}">{{ "آخر اختبار ناجح" if mh.ok else "آخر اختبار فشل" }}</span> {{ mh.message }}</p>{% endif %}
+  <div class="actions">
+    <form method="post" action="/settings/search/test"><input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}"><button class="btn btn-secondary" type="submit">اختبار البحث (طلب واحد)</button></form>
+    <form method="post" action="/settings/search/test-maps"><input type="hidden" name="csrf_token" value="{{ principal.csrf_token }}"><button class="btn btn-secondary" type="submit">اختبار خرائط Google (طلب واحد)</button></form>
+  </div>
 </section>
 {% endif %}
 

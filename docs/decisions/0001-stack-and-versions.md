@@ -23,6 +23,14 @@
 - **LangGraph غير مثبت بعد**: يدخل في M2 مع التحقق من الإصدار والـcheckpointer المتوافق وقتها، ولا يُجمع مع PydanticAI.
 - لا اشتراك في منصة مراقبة تجارية.
 
+## واجهات خارجية (تحقق 2026-09-24)
+
+| الواجهة | ما نستخدمه | المرجع |
+|---|---|---|
+| Google Places API (New) | `POST places:searchText`، `X-Goog-FieldMask` إلزامي، `pageSize` ≤ 20، 60 نتيجة كحد أقصى | [Text Search (New)](https://developers.google.com/maps/documentation/places/web-service/text-search) |
+| Tavily | `POST /search`، `Authorization: Bearer`، `search_depth=basic` (رصيد واحد)، 432/433 = نفاد الخطة | [Search endpoint](https://docs.tavily.com/documentation/api-reference/endpoint/search) |
+| Brave Search | `GET /res/v1/web/search`، `X-Subscription-Token` | [Brave Search API](https://brave.com/search/api/) |
+
 ## المصادر الرسمية التي روجعت
 
 - Supabase: [JWT signing keys](https://supabase.com/docs/guides/auth/signing-keys)، [JWTs](https://supabase.com/docs/guides/auth/jwts)، [API keys](https://supabase.com/docs/guides/api/api-keys).

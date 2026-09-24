@@ -599,8 +599,13 @@ async def save_search(
             max_candidates=_int(form, "max_candidates", 20),
             price_per_1k_requests=_dec(form, "price_per_1k_requests"),
             currency=(_s(form, "currency") or "USD").upper(),
+            maps_provider=_s(form, "maps_provider") or "fake",
+            maps_results_per_query=_int(form, "maps_results_per_query", 20),
+            maps_price_per_1k_requests=_dec(form, "maps_price_per_1k_requests"),
         )
-        await _apply_secrets(db, settings, p, form, ["brave_api_key"])
+        await _apply_secrets(
+            db, settings, p, form, ["brave_api_key", "tavily_api_key", "google_maps_api_key"]
+        )
         await integ.save_config(
             db, p.workspace_id, "search", cfg, version=_int(form, "version", 0), actor_id=p.actor_id
         )
@@ -609,6 +614,23 @@ async def save_search(
         await db.rollback()
         return await _page(request, p, db, settings, "search", 422, error=_err(exc))
     return _done("search")
+
+
+@router.post("/settings/search/test-maps")
+async def test_maps(
+    request: Request,
+    p: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+) -> Response:
+    require_owner(p)
+    try:
+        msg = await ct.test_maps(db, settings, p.workspace_id)
+        await db.commit()
+    except AppError as exc:
+        await db.commit()
+        return await _page(request, p, db, settings, "search", exc.status_code, error=_err(exc))
+    return _done("search", "tested", msg)
 
 
 @router.post("/settings/search/test")

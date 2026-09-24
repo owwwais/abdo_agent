@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-22",
+  "updated": "2026-09-24",
   "status_values": [
     "pending",
     "in_progress",
@@ -406,6 +406,49 @@
         "POST /api/products/{id}/test للمالك فقط"
       ],
       "notes": "فُصلت من F-003 (SPEC §4.3) لأنها تعتمد على ModelGateway؛ لم يُحذف أي معيار.",
+      "blocked_by": null
+    },
+    {
+      "id": "F-020",
+      "milestone": "M6+",
+      "title": "خرائط Google كمصدر اكتشاف (Places API New) بتخزين معرف المكان فقط",
+      "depends_on": [
+        "F-006"
+      ],
+      "status": "verified",
+      "acceptance": [
+        "طلب Text Search بقناع حقول أدنى بلا اسم أو هاتف",
+        "لا يُخزن من Google إلا place ID؛ الاسم والأدلة من موقع المنشأة",
+        "المنشأة بلا موقع أو المغلقة أو ذات صفحة اجتماعية فقط تُعد ولا تُخزن",
+        "لا طلب مدفوع بلا سعر معروف؛ كل طلب في دفتر الاستهلاك",
+        "المكان المعروف لا يُعاد جلب موقعه"
+      ],
+      "evidence": [
+        "tests/unit/test_search_clients.py (شكل الطلب، الأخطاء، العينة)",
+        "tests/integration/test_maps_discovery.py (دورة كاملة، مكان معروف، سعر مفقود)",
+        "tests/integration/test_settings_search.py (مفاتيح مشفرة، زر الاختبار)",
+        "docs/decisions/0008-search-providers-and-google-maps.md"
+      ],
+      "live_verification": "لم يُستدعَ Places API حقيقي (لا مفتاح)",
+      "blocked_by": null
+    },
+    {
+      "id": "F-021",
+      "milestone": "M6+",
+      "title": "مزود بحث مجاني بلا بطاقة (Tavily) بجانب Brave",
+      "depends_on": [
+        "F-006"
+      ],
+      "status": "verified",
+      "acceptance": [
+        "اختيار المزود من الإعدادات دون تعديل برمجي",
+        "السعر 0 مقبول ويُسجل الاستهلاك؛ نفاد الخطة خطأ مصنف"
+      ],
+      "evidence": [
+        "tests/unit/test_search_clients.py::test_tavily_request_shape_and_quota_error",
+        "tests/integration/test_settings_search.py"
+      ],
+      "live_verification": "لم يُستدعَ Tavily حقيقي (لا مفتاح)",
       "blocked_by": null
     }
   ]

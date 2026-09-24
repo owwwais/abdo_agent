@@ -9,6 +9,7 @@ import httpx
 from app.config import Settings
 from app.connectors.base import SourceConnector
 from app.connectors.netguard import Resolver
+from app.connectors.places import GoogleMapsConnector, PlacesClient
 from app.connectors.search import SearchClient, WebSearchConnector
 from app.connectors.simple import ManualConnector, UnconfiguredConnector
 from app.connectors.web import HtmlConnector, RssConnector
@@ -53,11 +54,11 @@ SOURCE_KINDS: dict[str, KindSpec] = {
         "إدخال ومراجعة بشرية؛ لا تسجيل دخول آلي ولا scraping",
     ),
     "google_maps": KindSpec(
-        "Google Maps",
+        "خرائط Google (Places API)",
         "api_key",
         False,
         True,
-        "غير مفعل افتراضيًا؛ يحتاج تحديد الاستخدام المسموح وسياسات البيانات",
+        "يبحث عن منشآت بالنشاط والمدينة؛ نخزن معرف المكان فقط ونقرأ البيانات من موقع المنشأة",
     ),
 }
 
@@ -82,6 +83,7 @@ def get_connector(
     resolver: Resolver | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
     search: SearchClient | None = None,
+    places: PlacesClient | None = None,
 ) -> SourceConnector:
     if key == "manual":
         return ManualConnector()
@@ -96,9 +98,11 @@ def get_connector(
             )
         return WebSearchConnector(search)
     if key == "google_maps":
-        return UnconfiguredConnector(
-            key,
-            "Google Maps غير مفعل افتراضيًا",
-            "حدد الاستخدام المسموح وفق سياسات Google Places ثم أضف موصلًا مخصصًا",
-        )
+        if places is None:
+            return UnconfiguredConnector(
+                key,
+                "خرائط Google غير مهيأة",
+                "أدخل مفتاح Google Maps وسعره في الإعدادات ← البحث",
+            )
+        return GoogleMapsConnector(places)
     return UnconfiguredConnector(key, "موصل غير معروف", "راجع إعداد المصدر")

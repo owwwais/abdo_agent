@@ -147,7 +147,7 @@ class TelegramConfig(_Cfg):
 
 
 class SearchConfig(_Cfg):
-    provider: Literal["fake", "brave"] = "fake"
+    provider: Literal["fake", "brave", "tavily"] = "fake"
     country: str = Field(default="SA", min_length=2, max_length=2)
     search_lang: str = Field(default="ar", min_length=2, max_length=10)
     max_queries: int = Field(default=3, ge=1, le=5)
@@ -155,6 +155,11 @@ class SearchConfig(_Cfg):
     # سعر الطلب الواحد (لكل 1000 طلب) كما في خطة المالك؛ بلا سعر يُرفض البحث المدفوع.
     price_per_1k_requests: Decimal | None = Field(default=None, ge=0, le=1000)
     currency: str = Field(default="USD", min_length=3, max_length=3)
+    # خرائط Google (Places API New): مؤشر اكتشاف؛ نخزن place ID فقط.
+    maps_provider: Literal["fake", "google"] = "fake"
+    maps_results_per_query: int = Field(default=20, ge=1, le=20)
+    # سعر كل 1000 طلب Text Search Enterprise بعد الحصة المجانية (0 إن بقيت ضمنها).
+    maps_price_per_1k_requests: Decimal | None = Field(default=None, ge=0, le=1000)
 
 
 # ---------------------------------------------------------------- التشغيل
@@ -324,6 +329,22 @@ async def record_health(
     health.update({"ok": ok, "message": message[:500], "checked_at": datetime.now(UTC).isoformat()})
     if extra:
         health.update(extra)
+    if row is None:
+        await db.execute(
+            insert(Integration).values(workspace_id=workspace_id, type=type_, health=health)
+        )
+    else:
+        row.health = health
+    await db.flush()
+
+
+async def record_subhealth(
+    db: AsyncSession, workspace_id: uuid.UUID, type_: str, key: str, *, ok: bool, message: str
+) -> None:
+    """نتيجة اختبار فرعي داخل صف تكامل قائم (مثل خرائط Google ضمن «search») دون مس نتيجته الأساسية."""
+    row = await _row(db, workspace_id, type_)
+    health = dict(row.health or {}) if row is not None else {}
+    health[key] = {"ok": ok, "message": message[:500], "checked_at": datetime.now(UTC).isoformat()}
     if row is None:
         await db.execute(
             insert(Integration).values(workspace_id=workspace_id, type=type_, health=health)

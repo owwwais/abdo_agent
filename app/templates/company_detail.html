@@ -34,7 +34,7 @@
   <section class="card">
     <h2>المعرفات</h2>
     <ul class="plain">
-      {% for i in identifiers %}<li>{{ label("identifier", i.kind) }}: <bdi dir="ltr">{{ i.normalized_value }}</bdi></li>{% else %}<li class="muted">لا معرفات</li>{% endfor %}
+      {% for i in identifiers %}<li>{{ label("identifier", i.kind) }}: {% if i.kind == "google_place" %}<a href="https://www.google.com/maps/place/?q=place_id:{{ i.normalized_value | urlencode }}" target="_blank" rel="noopener noreferrer">فتح في خرائط Google</a>{% else %}<bdi dir="ltr">{{ i.normalized_value }}</bdi>{% endif %}</li>{% else %}<li class="muted">لا معرفات</li>{% endfor %}
     </ul>
   </section>
 </div>

@@ -9,6 +9,7 @@ load_config → check_limits → plan_queries → discover → normalize_and_ded
 
 from __future__ import annotations
 
+import asyncio
 import random
 import re
 import uuid
@@ -16,6 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, TypedDict
+from urllib.parse import urlsplit
 
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy import func, select, text
@@ -25,20 +27,28 @@ from app.agents.gateway import CallCounter, ModelNotReady
 from app.agents.prompts import PROMPT_VERSION, QUERY_SYSTEM, QueryPlan, context_block
 from app.agents.providers import ProviderError
 from app.api.errors import AppError
+from app.connectors.base import SourceConfig
 from app.connectors.search import SearchError
 from app.connectors.web import HtmlConnector, RssConnector
-from app.db.models import Product, ProductSegment, Segment, Source, SourceSegment
+from app.db.models import (
+    CompanyIdentifier,
+    Product,
+    ProductSegment,
+    Segment,
+    Source,
+    SourceSegment,
+)
 from app.db.models_ops import Run
 from app.db.models_sales import Evidence, Opportunity
 from app.services import budget, runs
 from app.services import integrations as integ
-from app.services.channels import ChannelNotReady, search_context
+from app.services.channels import ChannelNotReady, maps_context, search_context
 from app.services.companies import CompanyDraft, apply_draft
-from app.services.normalize import normalize_name, website_identifier
+from app.services.normalize import Identifier, normalize_name, website_identifier
 from app.services.sources import source_config
 from app.workflows.common import Deps, local_today, workspace_tz
 
-DISCOVERABLE = ("web_search", "fake_search", "html", "rss")
+DISCOVERABLE = ("web_search", "fake_search", "google_maps", "html", "rss")
 
 
 class DiscoveryState(TypedDict, total=False):
@@ -192,7 +202,7 @@ def build_discovery_graph(deps: Deps) -> Any:
         if target is None:
             return {
                 "status": "skipped_configuration",
-                "reason": "لا يوجد منتج نشط بفئة نشطة ومصدر نشط قابل للاكتشاف (بحث ويب، دليل HTML بمسارات، أو RSS)",
+                "reason": "لا يوجد منتج نشط بفئة نشطة ومصدر نشط قابل للاكتشاف (بحث ويب، خرائط Google، دليل HTML بمسارات، أو RSS)",
             }
         await runs.event(
             deps.sm,
@@ -244,7 +254,7 @@ def build_discovery_graph(deps: Deps) -> Any:
                     )
                 )
             ).scalar_one()
-        if source.connector_key not in ("web_search", "fake_search"):
+        if source.connector_key not in ("web_search", "fake_search", "google_maps"):
             return {"queries": []}
         template = [f"{segment.name} {(regions or ['السعودية'])[0]}"]
         ctx = {
@@ -256,6 +266,7 @@ def build_discovery_graph(deps: Deps) -> Any:
             "segment": {"name": segment.name, "description": segment.description},
             "regions": regions or ["السعودية"],
             "max_queries": search_cfg.max_queries,
+            "search_type": "maps" if source.connector_key == "google_maps" else "web",
         }
         try:
             plan, _ = await deps.gateway(ws).complete(
@@ -282,6 +293,138 @@ def build_discovery_graph(deps: Deps) -> Any:
             queries = template
         return {"queries": queries or template}
 
+    async def read_site(url: str) -> dict[str, str] | None:
+        """يقرأ الصفحة الرئيسية لموقع المنشأة نفسها (لا من Google)؛ منها الاسم والوصف والأدلة."""
+        host = (urlsplit(url).hostname or "").lower().removeprefix("www.")
+        if not host:
+            return None
+        config = SourceConfig(
+            source_id=uuid.UUID(int=0),
+            workspace_id=uuid.UUID(int=0),
+            kind="html",
+            connector_key="html",
+            url=f"https://{host}/",
+            allowed_hosts=(host, f"www.{host}"),
+            allowed_paths=(),
+            max_pages=1,
+            max_records=1,
+            max_requests=3,
+            timeout_seconds=15,
+            credential_ref=None,
+            store_raw=False,
+            retention_days=90,
+            config_version=0,
+        )
+        result = await HtmlConnector(
+            deps.settings, resolver=deps.resolver, transport=deps.transport
+        ).sample(config)
+        if result.status != "succeeded" or not result.records:
+            return None
+        rec = result.records[0]
+        name = str(rec.fields.get("name") or "").strip()
+        if not name:
+            return None
+        return {
+            "name": name,
+            "url": rec.url or config.url or url,
+            "description": str(rec.fields.get("description") or "")[:500],
+        }
+
+    async def discover_places(
+        state: DiscoveryState, limit: int, charge: Any, settle: Any
+    ) -> list[dict[str, Any]]:
+        """خرائط Google مؤشر فقط: place ID يُخزن، والاسم والأدلة من موقع المنشأة نفسها."""
+        ws = uuid.UUID(state["workspace_id"])
+        run_id = uuid.UUID(state["run_id"])
+        async with deps.sm() as db:
+            try:
+                mctx = await maps_context(db, deps.settings, ws)
+            except ChannelNotReady as exc:
+                await runs.event(deps.sm, ws, run_id, "discover", str(exc), event_type="error")
+                return []
+            known = set(
+                (
+                    await db.execute(
+                        select(CompanyIdentifier.normalized_value).where(
+                            CompanyIdentifier.workspace_id == ws,
+                            CompanyIdentifier.kind == "google_place",
+                        )
+                    )
+                ).scalars()
+            )
+        if mctx.client.paid and not deps.settings.source_fetch_enabled:
+            await runs.event(
+                deps.sm,
+                ws,
+                run_id,
+                "discover",
+                "جلب المواقع معطل (SOURCE_FETCH_ENABLED)؛ خرائط Google تحتاجه لقراءة مواقع المنشآت",
+                event_type="error",
+            )
+            return []
+        counts = {"places": 0, "known": 0, "no_website": 0, "closed": 0, "site_failed": 0}
+        pending: list[tuple[str, Any]] = []
+        for q in state.get("queries", []):
+            if len(pending) >= limit:
+                break
+            reservation = None
+            if mctx.client.paid:
+                allowed, reservation = await charge(mctx.price_per_request)
+                if not allowed:
+                    break
+            try:
+                places = await mctx.client.text_search(q, count=mctx.config.maps_results_per_query)
+            except SearchError as exc:
+                if mctx.client.paid:
+                    await settle(reservation, mctx.price_per_request, mctx.client.name, False)
+                await runs.event(
+                    deps.sm, ws, run_id, "discover", f"فشل خرائط Google: {exc}", event_type="error"
+                )
+                continue
+            if mctx.client.paid:
+                await settle(reservation, mctx.price_per_request, mctx.client.name, True)
+            for place in places:
+                counts["places"] += 1
+                if not place.open:
+                    counts["closed"] += 1
+                elif place.place_id in known:
+                    counts["known"] += 1
+                elif not place.website or _AGGREGATORS.search(place.website):
+                    counts["no_website"] += 1  # بلا موقع خاص (أو صفحة شبكة اجتماعية فقط)
+                elif len(pending) < limit:
+                    known.add(place.place_id)
+                    pending.append((q, place))
+        semaphore = asyncio.Semaphore(5)
+
+        async def resolve(q: str, place: Any) -> dict[str, Any] | None:
+            if place.synthetic:
+                site: dict[str, str] | None = {
+                    "name": place.name,
+                    "url": place.website,
+                    "description": place.description,
+                }
+            else:
+                async with semaphore:
+                    site = await read_site(place.website)
+            if site is None:
+                return None
+            return {**site, "query": q, "synthetic": place.synthetic, "place_id": place.place_id}
+
+        resolved = await asyncio.gather(*(resolve(q, p) for q, p in pending))
+        cands = [c for c in resolved if c is not None]
+        counts["site_failed"] = len(pending) - len(cands)
+        await runs.event(
+            deps.sm,
+            ws,
+            run_id,
+            "discover",
+            f"خرائط Google: {counts['places']} مكانًا، {len(cands)} بموقع قُرئ، "
+            f"{counts['no_website']} بلا موقع خاص، {counts['known']} معروف مسبقًا، "
+            f"{counts['closed']} مغلق، {counts['site_failed']} تعذر قراءة موقعه",
+            data=counts,
+        )
+        return cands
+
     async def discover(state: DiscoveryState) -> DiscoveryState:
         ws = uuid.UUID(state["workspace_id"])
         run_id = uuid.UUID(state["run_id"])
@@ -295,6 +438,45 @@ def build_discovery_graph(deps: Deps) -> Any:
         limit = search_cfg.max_candidates
         cands: list[dict[str, Any]] = []
         config = source_config(source)
+        tz = await workspace_tz(deps.sm, ws, deps.settings.app_timezone)
+
+        async def charge(price: Decimal) -> tuple[bool, Any]:
+            """يحجز كلفة طلب واحد؛ (False, None) إن منعت الميزانية."""
+            async with deps.sm() as db, db.begin():
+                try:
+                    return True, await budget.reserve(
+                        db, ws, ops, amount=price, category="discovery", run_id=run_id, tz_name=tz
+                    )
+                except budget.BudgetBlocked as exc:
+                    await runs.event(
+                        deps.sm, ws, run_id, "discover", str(exc), event_type="warning"
+                    )
+                    return False, None
+
+        async def settle(reservation: Any, price: Decimal, provider: str, ok: bool) -> None:
+            async with deps.sm() as db, db.begin():
+                if not ok:
+                    await budget.release(db, reservation)
+                    return
+                await budget.settle(db, reservation, price)
+                budget.record_usage(
+                    db,
+                    workspace_id=ws,
+                    run_id=run_id,
+                    opportunity_id=None,
+                    category="discovery",
+                    kind="search",
+                    provider=provider,
+                    model="",
+                    role="search",
+                    input_tokens=0,
+                    output_tokens=0,
+                    requests=1,
+                    estimated_cost=price,
+                    currency=search_cfg.currency,
+                    pricing_version="owner-set",
+                )
+
         if source.connector_key in ("web_search", "fake_search"):
             async with deps.sm() as db:
                 try:
@@ -302,57 +484,25 @@ def build_discovery_graph(deps: Deps) -> Any:
                 except ChannelNotReady as exc:
                     return {"status": "failed", "reason": str(exc)}
             per_query = max(1, -(-limit // max(1, len(state.get("queries", [])))))
-            tz = await workspace_tz(deps.sm, ws, deps.settings.app_timezone)
             for q in state.get("queries", []):
                 if len(cands) >= limit:
                     break
                 reservation = None
                 if sctx.client.paid:
-                    async with deps.sm() as db, db.begin():
-                        try:
-                            reservation = await budget.reserve(
-                                db,
-                                ws,
-                                ops,
-                                amount=sctx.price_per_request or Decimal("0.01"),
-                                category="discovery",
-                                run_id=run_id,
-                                tz_name=tz,
-                            )
-                        except budget.BudgetBlocked as exc:
-                            await runs.event(
-                                deps.sm, ws, run_id, "discover", str(exc), event_type="warning"
-                            )
-                            break
+                    allowed, reservation = await charge(sctx.price_per_request)
+                    if not allowed:
+                        break
                 try:
                     hits = await sctx.client.search(q, count=min(20, per_query))
                 except SearchError as exc:
-                    async with deps.sm() as db, db.begin():
-                        await budget.release(db, reservation)
+                    if sctx.client.paid:
+                        await settle(reservation, sctx.price_per_request, sctx.client.name, False)
                     await runs.event(
                         deps.sm, ws, run_id, "discover", f"فشل البحث: {exc}", event_type="error"
                     )
                     continue
                 if sctx.client.paid:
-                    async with deps.sm() as db, db.begin():
-                        await budget.settle(db, reservation, sctx.price_per_request)
-                        budget.record_usage(
-                            db,
-                            workspace_id=ws,
-                            run_id=run_id,
-                            opportunity_id=None,
-                            category="discovery",
-                            kind="search",
-                            provider=sctx.client.name,
-                            model="",
-                            role="search",
-                            input_tokens=0,
-                            output_tokens=0,
-                            requests=1,
-                            estimated_cost=sctx.price_per_request,
-                            currency=search_cfg.currency,
-                            pricing_version="owner-set",
-                        )
+                    await settle(reservation, sctx.price_per_request, sctx.client.name, True)
                 for h in hits:
                     cands.append(
                         {
@@ -363,6 +513,8 @@ def build_discovery_graph(deps: Deps) -> Any:
                             "synthetic": h.synthetic,
                         }
                     )
+        elif source.connector_key == "google_maps":
+            cands = await discover_places(state, limit, charge, settle)
         elif source.connector_key == "html":
             records, _ = await HtmlConnector(
                 deps.settings, resolver=deps.resolver, transport=deps.transport
@@ -429,6 +581,8 @@ def build_discovery_graph(deps: Deps) -> Any:
                 if ident:
                     draft.identifiers.append(ident)
                     draft.domain = domain
+                if c.get("place_id"):
+                    draft.identifiers.append(Identifier("google_place", c["place_id"], "strong"))
                 result, company_id = await apply_draft(
                     db,
                     deps.settings,

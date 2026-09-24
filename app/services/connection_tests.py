@@ -21,7 +21,13 @@ from app.connectors.telegram import TelegramError
 from app.db.models import Product, Source
 from app.services import budget
 from app.services import integrations as integ
-from app.services.channels import ChannelNotReady, mail_context, search_context, telegram_context
+from app.services.channels import (
+    ChannelNotReady,
+    mail_context,
+    maps_context,
+    search_context,
+    telegram_context,
+)
 from app.services.secrets import get_secret
 
 
@@ -194,6 +200,43 @@ async def test_search(db: AsyncSession, settings: Settings, workspace_id: uuid.U
     return message
 
 
+async def test_maps(db: AsyncSession, settings: Settings, workspace_id: uuid.UUID) -> str:
+    """طلب Text Search واحد؛ لا يُخزن من نتيجته شيء."""
+    try:
+        ctx = await maps_context(db, settings, workspace_id)
+    except ChannelNotReady as exc:
+        raise AppError(str(exc), code=exc.code) from exc
+    try:
+        hits = await ctx.client.text_search("عيادة أسنان الرياض", count=5)
+    except SearchError as exc:
+        await integ.record_subhealth(db, workspace_id, "search", "maps", ok=False, message=str(exc))
+        raise AppError(str(exc), code=exc.code) from exc
+    if ctx.client.paid:
+        budget.record_usage(
+            db,
+            workspace_id=workspace_id,
+            run_id=None,
+            opportunity_id=None,
+            category="test",
+            kind="search",
+            provider=ctx.client.name,
+            model="",
+            role="search",
+            input_tokens=0,
+            output_tokens=0,
+            requests=1,
+            estimated_cost=ctx.price_per_request,
+            currency=ctx.config.currency,
+            pricing_version="owner-set",
+        )
+    with_site = sum(1 for h in hits if h.website)
+    message = f"{ctx.client.name}: {len(hits)} أماكن، {with_site} منها بموقع إلكتروني" + (
+        " (اصطناعية)" if hits and hits[0].synthetic else ""
+    )
+    await integ.record_subhealth(db, workspace_id, "search", "maps", ok=True, message=message)
+    return message
+
+
 async def live_readiness(
     db: AsyncSession, settings: Settings, workspace_id: uuid.UUID
 ) -> dict[str, list[str]]:
@@ -246,8 +289,19 @@ async def live_readiness(
     if not settings.outbound_enabled:
         warnings.append("OUTBOUND_ENABLED=false في ملف البيئة: لن يُرسل أي بريد حتى بعد الاعتماد")
     search = await integ.get_config(db, settings, workspace_id, "search", integ.SearchConfig)
-    if search.provider == "fake":
-        warnings.append("البحث على الويب اصطناعي؛ الاكتشاف سيعتمد على المصادر الأخرى النشطة")
+    kinds = set(
+        (
+            await db.execute(
+                select(Source.connector_key).where(
+                    Source.workspace_id == workspace_id, Source.status == "active"
+                )
+            )
+        ).scalars()
+    )
+    if search.provider == "fake" and kinds & {"web_search", "fake_search"}:
+        warnings.append("مصدر «بحث ويب» نشط لكن مزود البحث اصطناعي؛ اختر Brave أو Tavily")
+    if search.maps_provider != "google" and "google_maps" in kinds:
+        warnings.append("مصدر «خرائط Google» نشط لكنها غير مفعلة؛ أدخل مفتاح Google Maps")
     return {"blockers": blockers, "warnings": warnings}
 
 

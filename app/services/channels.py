@@ -15,12 +15,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.connectors.mail import FakeMailbox, Mailbox, SmtpImapMailbox, SmtpImapSettings
-from app.connectors.search import BraveSearchClient, FakeSearchClient, SearchClient
+from app.connectors.places import FakePlacesClient, GooglePlacesClient, PlacesClient
+from app.connectors.search import (
+    BraveSearchClient,
+    FakeSearchClient,
+    SearchClient,
+    TavilySearchClient,
+)
 from app.connectors.telegram import TelegramClient
 from app.services import integrations as integ
 from app.services.secrets import get_secret
 
-TEST_HOOKS: dict[str, Any] = {"mailbox": None, "telegram_transport": None, "search_transport": None}
+TEST_HOOKS: dict[str, Any] = {
+    "mailbox": None,
+    "telegram_transport": None,
+    "search_transport": None,
+    "places_transport": None,
+}
 
 
 class ChannelNotReady(Exception):
@@ -82,15 +93,60 @@ async def search_context(
     cfg = await integ.get_config(db, settings, workspace_id, "search", integ.SearchConfig)
     if integ.forced_fake(settings) or cfg.provider == "fake":
         return SearchContext(cfg, FakeSearchClient(), Decimal("0"))
-    key, _ = await get_secret(db, settings, workspace_id, "brave_api_key")
+    names = {"brave": ("brave_api_key", "Brave Search"), "tavily": ("tavily_api_key", "Tavily")}
+    secret_key, label = names[cfg.provider]
+    key, _ = await get_secret(db, settings, workspace_id, secret_key)
     if not key:
-        raise ChannelNotReady("مفتاح Brave Search غير مضبوط")
+        raise ChannelNotReady(f"مفتاح {label} غير مضبوط")
+    if cfg.price_per_1k_requests is None:
+        raise ChannelNotReady(
+            f"أدخل سعر كل 1000 طلب في خطة {label} (اكتب 0 إن كانت خطتك مجانية)", "price_missing"
+        )
     transport: httpx.AsyncBaseTransport | None = TEST_HOOKS["search_transport"]
-    price = (cfg.price_per_1k_requests or Decimal("0")) / Decimal(1000)
-    return SearchContext(
+    price = cfg.price_per_1k_requests / Decimal(1000)
+    client: SearchClient
+    if cfg.provider == "tavily":
+        client = TavilySearchClient(key, country=cfg.country, transport=transport)
+    else:
+        client = BraveSearchClient(
+            key, country=cfg.country, lang=cfg.search_lang, transport=transport
+        )
+    return SearchContext(cfg, client, price)
+
+
+@dataclass
+class MapsContext:
+    config: integ.SearchConfig
+    client: PlacesClient
+    price_per_request: Decimal
+
+
+async def maps_context(
+    db: AsyncSession, settings: Settings, workspace_id: uuid.UUID
+) -> MapsContext:
+    cfg = await integ.get_config(db, settings, workspace_id, "search", integ.SearchConfig)
+    if integ.forced_fake(settings):
+        return MapsContext(cfg, FakePlacesClient(), Decimal("0"))
+    # خارج demo لا أماكن مختلقة: مصدر غير مهيأ يعلن حاجته للإعداد (T03).
+    if cfg.maps_provider != "google":
+        raise ChannelNotReady("خرائط Google غير مفعلة: اخترها وأدخل مفتاحها في الإعدادات ← البحث")
+    key, _ = await get_secret(db, settings, workspace_id, "google_maps_api_key")
+    if not key:
+        raise ChannelNotReady("مفتاح Google Maps غير مضبوط")
+    if cfg.maps_price_per_1k_requests is None:
+        raise ChannelNotReady(
+            "أدخل سعر كل 1000 طلب لخرائط Google (0 ما دمت ضمن الحصة المجانية الشهرية)",
+            "price_missing",
+        )
+    return MapsContext(
         cfg,
-        BraveSearchClient(key, country=cfg.country, lang=cfg.search_lang, transport=transport),
-        price,
+        GooglePlacesClient(
+            key,
+            language=cfg.search_lang,
+            region=cfg.country,
+            transport=TEST_HOOKS["places_transport"],
+        ),
+        cfg.maps_price_per_1k_requests / Decimal(1000),
     )
 
 

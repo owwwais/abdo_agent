@@ -64,6 +64,7 @@ LABELS: dict[str, dict[str, str]] = {
         "cr_number": "السجل التجاري",
         "phone": "هاتف (معرف ضعيف)",
         "name": "الاسم المطبع (معرف ضعيف)",
+        "google_place": "معرف مكان Google",
     },
     "channel": {"email": "بريد", "phone": "هاتف", "whatsapp": "واتساب"},
     "opportunity": {

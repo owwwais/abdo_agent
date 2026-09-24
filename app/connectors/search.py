@@ -1,7 +1,11 @@
-"""البحث على الويب: Brave Search API (موصل حقيقي واحد) وFakeSearch الاصطناعي.
+"""البحث على الويب: Brave وTavily (موصلان حقيقيان) وFakeSearch الاصطناعي.
 
 Brave: GET https://api.search.brave.com/res/v1/web/search مع ترويسة X-Subscription-Token،
 والمعاملات q وcount (≤20) وcountry وsearch_lang. النتائج في web.results[].title/url/description.
+
+Tavily: POST https://api.tavily.com/search مع Authorization: Bearer، والجسم query وsearch_depth=basic
+(رصيد واحد) وmax_results (≤20) وtopic=general وcountry (اسم الدولة بالإنجليزية). النتائج في
+results[].title/url/content. الخطة المجانية 1000 رصيد شهريًا بلا بطاقة.
 """
 
 from __future__ import annotations
@@ -16,6 +20,18 @@ from app.connectors.base import SampleRecord, SampleResult, SourceConfig, Valida
 from app.connectors.simple import _FAKE_RESULTS
 
 BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
+TAVILY_URL = "https://api.tavily.com/search"
+# Tavily يقبل اسم الدولة لا رمزها، ومع topic=general فقط.
+_TAVILY_COUNTRIES = {
+    "SA": "saudi arabia",
+    "AE": "united arab emirates",
+    "KW": "kuwait",
+    "QA": "qatar",
+    "BH": "bahrain",
+    "OM": "oman",
+    "EG": "egypt",
+    "JO": "jordan",
+}
 
 
 class SearchError(Exception):
@@ -96,6 +112,66 @@ class BraveSearchClient:
                         str(r.get("title", ""))[:300],
                         url[:2000],
                         str(r.get("description", ""))[:500],
+                    )
+                )
+        return hits
+
+
+class TavilySearchClient:
+    name = "tavily"
+    paid = True  # يُسجل استهلاكه دائمًا؛ السعر 0 في الخطة المجانية
+
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        country: str = "SA",
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self._key = api_key
+        self._country = _TAVILY_COUNTRIES.get(country.upper())
+        self._transport = transport
+
+    async def search(self, query: str, *, count: int) -> list[SearchHit]:
+        body: dict[str, object] = {
+            "query": query[:400],
+            "search_depth": "basic",
+            "max_results": max(1, min(count, 20)),
+            "topic": "general",
+            "include_answer": False,
+            "include_raw_content": False,
+        }
+        if self._country:
+            body["country"] = self._country
+        headers = {"Authorization": f"Bearer {self._key}", "Content-Type": "application/json"}
+        try:
+            async with httpx.AsyncClient(transport=self._transport, timeout=30.0) as client:
+                resp = await client.post(TAVILY_URL, json=body, headers=headers)
+        except httpx.HTTPError as exc:
+            raise SearchError("تعذر الاتصال بـTavily", retryable=True, code="network") from exc
+        if resp.status_code in (401, 403):
+            raise SearchError("مفتاح Tavily غير صالح", code="auth")
+        if resp.status_code == 429:
+            raise SearchError("تجاوز حد طلبات Tavily", retryable=True, code="rate_limit")
+        if resp.status_code in (432, 433):
+            raise SearchError("نفد رصيد خطة Tavily لهذا الشهر", code="quota")
+        if resp.status_code >= 400:
+            raise SearchError(
+                f"Tavily أعاد خطأ ({resp.status_code})", retryable=resp.status_code >= 500
+            )
+        try:
+            results = resp.json().get("results", [])
+        except ValueError as exc:
+            raise SearchError("رد غير صالح من Tavily") from exc
+        hits = []
+        for r in results[:count]:
+            url = str(r.get("url", ""))
+            if url.startswith(("http://", "https://")):
+                hits.append(
+                    SearchHit(
+                        str(r.get("title", ""))[:300],
+                        url[:2000],
+                        str(r.get("content", ""))[:500],
                     )
                 )
         return hits

@@ -35,7 +35,9 @@ class QueryPlan(BaseModel):
 
 QUERY_SYSTEM = (
     "أنت مساعد بحث مبيعات. اقترح استعلامات بحث ويب قصيرة (عربية غالبًا) للعثور على منشآت عامة "
-    "من الفئة المستهدفة قد تناسب المنتج. لا تستهدف أفرادًا ولا بيانات شخصية. " + UNTRUSTED_NOTE
+    "من الفئة المستهدفة قد تناسب المنتج. لا تستهدف أفرادًا ولا بيانات شخصية. "
+    "إن كان search_type = maps فالبحث في خرائط Google: اكتب نوع النشاط والمدينة فقط "
+    "(مثل «عيادة أسنان الرياض»)، بلا وصف للمشكلة ولا كلمات بحث ويب. " + UNTRUSTED_NOTE
 )
 
 
@@ -128,7 +130,7 @@ def _fake_query_plan(user: str, ctx: dict[str, Any]) -> dict[str, Any]:
     regions = ctx.get("regions") or ["الرياض"]
     signals = ctx.get("product", {}).get("fit_signals") or []
     queries = [f"{seg} {regions[0]}"]
-    if signals:
+    if signals and ctx.get("search_type") != "maps":
         queries.append(f"{seg} {signals[0]} {regions[0]}")
     return {"queries": queries[: int(ctx.get("max_queries", 3))], "rationale": "خطة اصطناعية"}
 

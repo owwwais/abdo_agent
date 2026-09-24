@@ -33,6 +33,8 @@ SECRETS: dict[str, SecretSpec] = {
         "مفتاح مزود متوافق مع OpenAI", "openai_compatible_api_key"
     ),
     "brave_api_key": SecretSpec("مفتاح Brave Search", "brave_search_api_key"),
+    "tavily_api_key": SecretSpec("مفتاح Tavily", "tavily_api_key"),
+    "google_maps_api_key": SecretSpec("مفتاح Google Maps (Places API)", "google_maps_api_key"),
     "smtp_password": SecretSpec("كلمة مرور SMTP", "smtp_password"),
     "imap_password": SecretSpec("كلمة مرور IMAP", "imap_password"),
     "telegram_bot_token": SecretSpec("رمز بوت تيليجرام", "telegram_bot_token"),

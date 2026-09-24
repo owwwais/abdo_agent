@@ -1,14 +1,14 @@
 # التسليم — آخر حالة
 
-**التاريخ:** 2026-09-22 · **المرحلة:** M0–M6 مبنية ومختبرة محليًا بموصلات اصطناعية. المتبقي: إدخال مفاتيح حقيقية ثم النشر (F-018).
+**التاريخ:** 2026-09-24 · **المرحلة:** M0–M6 + خرائط Google وTavily مبنية ومختبرة محليًا. الكود على GitHub (`owwwais/abdo_agent`، main، **عام**). المتبقي: مفاتيح حقيقية ثم النشر (F-018).
 
 ## آخر ما تحقق
 
-18 خاصية من 19 = `verified` محليًا، وF-018 (النشر والنسخ الاحتياطي) `in_progress`: النسخ الاحتياطي والاسترجاع مختبران والأدلة مكتوبة، لكن لم تُبنَ صورة Docker ولم يُنشر شيء. الأدلة في `harness/features.json` و`docs/verification/m0-m1.md` و`docs/verification/m2-m6.md`.
+20 خاصية من 21 = `verified` محليًا (أُضيفت F-020 خرائط Google وF-021 Tavily)، وF-018 (النشر والنسخ الاحتياطي) `in_progress`: النسخ الاحتياطي والاسترجاع مختبران والأدلة مكتوبة، لكن لم تُبنَ صورة Docker ولم يُنشر شيء. الأدلة في `harness/features.json` و`docs/verification/m0-m1.md` و`docs/verification/m2-m6.md`.
 
 ## الأوامر ونتائجها
 
-- `uv run pytest -q` → **180 passed** (وحدة + تكامل على PostgreSQL حقيقي + HTML + E2E بمتصفح).
+- `uv run pytest -q` → **190 passed** (وحدة + تكامل على PostgreSQL حقيقي + HTML + E2E بمتصفح).
 - `uv run ruff check` و`ruff format --check` و`mypy app scripts` → نظيف.
 - `alembic upgrade head` من قاعدة فارغة → 0001، 0002، 0003 بلا انحراف.
 - `scripts/backup.py dump` ثم `verify` → استرجاع ناجح في قاعدة مؤقتة.
@@ -24,7 +24,8 @@
 - الإعدادات والأسرار: `app/services/integrations.py`، `secrets.py`، `connection_tests.py`، `app/web/settings_pages.py`
 - الواجهة: `app/web/sales_pages.py` + قوالب `approvals/opportunities/opportunity_detail/conversations/runs`
 - الواجهة البرمجية: `app/api/sales_api.py`، `app/api/webhooks.py`
-- الأدلة: `docs/runbooks/launch-guide.md` (الدليل الكامل للمالك)، `backup-restore.md`، `docs/decisions/0007`
+- الأدلة: `docs/runbooks/launch-guide.md` (الدليل الكامل للمالك)، `backup-restore.md`، `adding-sources.md` (إضافة منصات)، `docs/decisions/0007` و`0008`
+- خرائط Google: `app/connectors/places.py`، و`discover_places` في `app/workflows/discovery.py`، و`maps_context` في `app/services/channels.py`
 
 ## العوائق (كلها تحتاج قرار المالك أو حسابه، لا برمجة)
 
@@ -32,7 +33,7 @@
 |---|---|
 | لا مشروع Supabase ولا مفاتيحه | الدخول الحقيقي والنشر |
 | لا مفتاح نموذج ولا اعتماد سياسة المعالجة | التشغيل الفعلي وتقييم نموذج حقيقي |
-| لا مفتاح Brave | اكتشاف حقيقي (البحث يبقى اصطناعيًا) |
+| لا مفتاح Tavily أو Brave أو Google Maps | اكتشاف حقيقي (البحث يبقى اصطناعيًا) |
 | لا كلمة مرور صندوق Hostinger ولا سر الويب هوك | الإرسال والاستقبال الحقيقيان |
 | لا بوت تيليجرام ولا مجموعة | الاعتماد من تيليجرام (اللوحة بديل كامل) |
 | لا ميزانية نقدية محددة | التحويل إلى وضع live (شرط في لوحة الجاهزية) |
@@ -45,6 +46,8 @@
 - `SIGTERM` غير مدعوم في العامل على Windows (Linux يعمل).
 - المصدر التجريبي في قاعدة قديمة يبقى بـ`connector_key = fake_search`؛ التثبيت الجديد يستخدم `web_search`.
 - تقييم النماذج يغطي دور الاستخراج (تصنيف الردود) فقط؛ لا تقييم آلي لجودة المسودات.
+- خرائط Google لا تلتقط المنشآت بلا موقع إلكتروني (قيد شروط Google على التخزين)؛ تُعد في سجل التشغيل فقط.
+- المستودع عام: قرار المالك أن يبقى كذلك أو يُحوَّل إلى خاص من إعدادات GitHub.
 - لا مقياس زمني لاستجابة IMAP تحت ضغط؛ حجم الصندوق الحقيقي غير مُختبر.
 
 ## الخطوة التالية الدقيقة

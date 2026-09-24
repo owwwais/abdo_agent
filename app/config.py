@@ -77,6 +77,8 @@ class Settings(BaseSettings):
     openai_compatible_api_key: SecretStr = SecretStr("")
     openai_compatible_base_url: str = ""
     brave_search_api_key: SecretStr = SecretStr("")
+    tavily_api_key: SecretStr = SecretStr("")
+    google_maps_api_key: SecretStr = SecretStr("")
     telegram_bot_token: SecretStr = SecretStr("")
     telegram_chat_id: str = ""
     smtp_host: str = ""

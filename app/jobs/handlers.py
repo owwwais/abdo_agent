@@ -19,7 +19,7 @@ from app.db.models import Source
 from app.jobs import queue
 from app.jobs.queue import Lease
 from app.services import sources as source_service
-from app.services.channels import ChannelNotReady, search_context
+from app.services.channels import ChannelNotReady, maps_context, search_context
 
 
 @dataclass
@@ -52,12 +52,20 @@ async def source_sample(ctx: HandlerContext, lease: Lease) -> dict[str, Any] | N
                 search_client = (await search_context(db, ctx.settings, config.workspace_id)).client
             except ChannelNotReady:
                 search_client = None
+    places_client = None
+    if config.connector_key == "google_maps":
+        async with ctx.sessionmaker() as db:
+            try:
+                places_client = (await maps_context(db, ctx.settings, config.workspace_id)).client
+            except ChannelNotReady:
+                places_client = None
     connector = get_connector(
         config.connector_key,
         ctx.settings,
         resolver=ctx.resolver,
         transport=ctx.transport,
         search=search_client,
+        places=places_client,
     )
     started = time.monotonic()
     result = await connector.sample(config)
