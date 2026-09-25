@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from app.db.models import Job, WorkerHeartbeat
 from app.jobs import queue
 from app.main import create_app
-from tests.conftest import WorkspaceFixture, make_settings
+from tests.conftest import ClientFactory, WorkspaceFixture, make_settings
 
 
 async def job_status(sm: async_sessionmaker[AsyncSession], key: str) -> str:
@@ -61,3 +61,10 @@ async def test_worker_not_started_by_default(
             )
         await asyncio.sleep(1)
         assert await job_status(sm, "embedded-2") == "queued"
+
+
+async def test_health_endpoints_accept_head_for_uptime_monitors(client_for: ClientFactory) -> None:
+    client = await client_for()
+    for path in ("/health/live", "/health/ready"):
+        assert (await client.head(path)).status_code == 200
+        assert (await client.get(path)).status_code == 200

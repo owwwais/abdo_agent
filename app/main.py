@@ -92,6 +92,9 @@ def create_app(settings: Settings | None = None, engine: AsyncEngine | None = No
         openapi_url="/api/openapi.json" if settings.app_env.is_local else None,
     )
     app.state.settings = settings
+    if not logging.getLogger().handlers:
+        # uvicorn من سطر الأوامر (الحاوية) لا يضبط سجل التطبيق؛ بدون هذا تختفي رسائل العامل من سجل Render.
+        logging.basicConfig(level=settings.log_level, format="%(levelname)s %(name)s: %(message)s")
     app.state.supabase = SupabaseAuth(settings) if settings.supabase_configured else None
     if engine is not None:  # الاختبارات تمرر engine ولا تشغل lifespan
         app.state.engine = engine
@@ -126,11 +129,12 @@ def create_app(settings: Settings | None = None, engine: AsyncEngine | None = No
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
         return response
 
-    @app.get("/health/live", include_in_schema=False)
+    # HEAD مقبول لأن مراقبي التوفر (مثل UptimeRobot) يستخدمونه افتراضيًا.
+    @app.api_route("/health/live", methods=["GET", "HEAD"], include_in_schema=False)
     async def live() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.get("/health/ready", include_in_schema=False)
+    @app.api_route("/health/ready", methods=["GET", "HEAD"], include_in_schema=False)
     async def ready(request: Request) -> Response:
         try:
             async with request.app.state.engine.connect() as conn:

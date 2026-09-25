@@ -378,6 +378,9 @@ uv run python scripts/backup.py verify backups/<الملف>.dump
 | العَرَض | السبب الأرجح | الحل |
 |---|---|---|
 | التطبيق لا يقلع على Render | متغير ناقص أو https مفقود | اقرأ سطر «إعداد غير صالح» في السجل؛ يسمي المتغير |
+| «Internal Server Error» عند الدخول، و`/health/ready` يعيد 503 | الجداول غير منشأة في Supabase | تأكد أن `MIGRATE_ON_START=true` في **Environment** بالخدمة، ثم **Manual Deploy ← Deploy latest commit**. السجل يجب أن يبدأ بـ«تطبيق الترحيلات قبل الإقلاع…» |
+| المفاتيح في `.env` ولا يراها Render | `.env` لا يُرفع إلى GitHub عمدًا (حماية الأسرار) | أدخل المتغيرات في صفحة **Environment** بالخدمة على Render (زر **Add from .env** يقبل لصقها دفعة واحدة) |
+| لا يظهر `worker … started` في سجل Render | `RUN_WORKER_IN_WEB` غير مضبوط أو النشر من نسخة قديمة | أضف `RUN_WORKER_IN_WEB=true` ثم Deploy latest commit |
 | «تعذر جلب مفاتيح التحقق من Supabase» عند الدخول | المشروع على HS256 القديم | 3.1 الخطوة 4 |
 | «حسابك غير مرتبط بعضوية» | لم يُشغَّل `add_member.py` | المرحلة د الخطوة 6 |
 | اختبار البريد يفشل في SMTP | كلمة مرور خاطئة أو المنفذ 465 محجوب | جرّب 587 مع STARTTLS من «الإعدادات المتقدمة» |
