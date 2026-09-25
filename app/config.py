@@ -63,6 +63,10 @@ class Settings(BaseSettings):
 
     dev_auth_enabled: bool = False
 
+    # خدمة واحدة (مثل خطة Render المجانية التي لا تشمل Background Worker): العامل يدور داخل
+    # عملية الويب نفسها. لا تفعّله مع خدمة عامل منفصلة (لا ضرر، لكنه استهلاك بلا داعٍ).
+    run_worker_in_web: bool = False
+
     # مفتاح/مفاتيح Fernet لتشفير الأسرار المحفوظة من صفحة الإعدادات (مفصولة بفواصل؛ الأول للتشفير
     # والباقي لفك تشفير القديم أثناء التدوير). مطلوب خارج البيئات المحلية.
     secrets_encryption_key: SecretStr = SecretStr("")

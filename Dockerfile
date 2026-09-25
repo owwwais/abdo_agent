@@ -24,4 +24,5 @@ USER appuser
 
 EXPOSE 8000
 # خلف موازن Render: ترويسات الوكيل تحدد https الصحيح. لا يُستخدم عنوان العميل لأي صلاحية خارج التطوير.
-CMD ["sh", "-c", "uvicorn app.main:create_app --factory --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]
+# scripts/start-web.sh يطبق الترحيلات أولًا إن كان MIGRATE_ON_START=true (خدمة واحدة مجانية)، ثم يشغّل uvicorn.
+CMD ["sh", "scripts/start-web.sh"]

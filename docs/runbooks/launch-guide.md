@@ -189,6 +189,57 @@ uv run python scripts/eval_models.py --yes
 
 ## 5) المرحلة د: الإطلاق على الإنترنت (Render + Supabase)
 
+طريقتان:
+- **5.أ مجانية:** خدمة ويب واحدة يدور فيها العامل.
+- **5.ب مدفوعة:** Blueprint بخدمتين، ويب وعامل منفصلين. تنتقل إليها لاحقًا دون تغيير في الكود.
+
+### 5.أ الخطة المجانية: خدمة واحدة
+
+خطة Render المجانية تشمل خدمات الويب فقط، لا Background Worker، والخدمة المجانية تنام بعد 15 دقيقة بلا زيارات. لذلك:
+- يعمل العامل **داخل** خدمة الويب (`RUN_WORKER_IN_WEB=true`).
+- تُنشأ الجداول عند كل إقلاع (`MIGRATE_ON_START=true`).
+- مراقب خارجي مجاني يطرق الخدمة كل 10 دقائق فلا تنام.
+
+1. [dashboard.render.com](https://dashboard.render.com) ← **New ← Web Service** (لا Blueprint) ← اربط GitHub ← اختر `abdo_agent`.
+2. الإعدادات:
+   - **Language:** Docker.
+   - **Branch:** `main`.
+   - **Region:** الأقرب إلى منطقة Supabase. لقاعدة في Mumbai (`ap-south-1`) اختر **Singapore**؛ لقاعدة في Frankfurt اختر Frankfurt. كل صفحة تستعلم القاعدة مرات عدة، فالقرب يهم.
+   - **Instance Type:** **Free**.
+3. **Environment Variables:** اضغط **Add from .env** والصق التالي بقيمك (يمكن جمعها كلها مرة واحدة):
+   ```
+   APP_ENV=production
+   APP_TIMEZONE=Asia/Riyadh
+   APP_BASE_URL=https://<اسم-الخدمة>.onrender.com
+   DATABASE_URL=<رابط Session pooler>
+   SUPABASE_URL=<...>
+   SUPABASE_PUBLISHABLE_KEY=<...>
+   SESSION_SECRET=<...>
+   DATA_HASH_KEY=<...>
+   SECRETS_ENCRYPTION_KEY=<...>
+   RUN_WORKER_IN_WEB=true
+   MIGRATE_ON_START=true
+   ```
+   الأسرار الثلاثة قيم جديدة من `gen_secrets.py --print` (3.2)، لا قيم جهازك.
+4. **Advanced:**
+   - **Health Check Path** = `/health/ready`.
+   - **Auto-Deploy** = Off إن أردت أن تنشر بيدك فقط.
+5. **Create Web Service.** البناء الأول يستغرق بضع دقائق. في السجل (Logs) سترى «تطبيق الترحيلات قبل الإقلاع…» ثم `worker … started`.
+6. إن اختلف رابط الخدمة عما كتبته في `APP_BASE_URL`، صححه من **Environment** ثم **Manual Deploy**.
+7. **ابقِها مستيقظة:**
+   - في [uptimerobot.com](https://uptimerobot.com) أو [cron-job.org](https://cron-job.org) (مجانيان) أنشئ مراقبًا يطلب `https://<رابطك>/health/live` كل 10 دقائق.
+   - بدونه تنام الخدمة، فتفوت دورة الاكتشاف ونوافذ المعالجة وتتأخر المزامنة. النظام لا يعوّض الفائت، وهذا مقصود.
+8. تابع من الخطوة 5 في 5.ب أدناه (التحقق، `add_member.py`، الدخول، ويب هوك Hostinger).
+
+**حدود الخطة المجانية (اعرفها قبل الاعتماد عليها):**
+- **750 ساعة مجانية شهريًا لكل حساب:** تكفي خدمة واحدة تعمل 24/7. لا تُنشئ خدمة مجانية ثانية وإلا نفدت الساعات.
+- **معالج بطيء:** الصفحات أبطأ من الخطة المدفوعة، والذاكرة كافية (التطبيق مع العامل يستهلك نحو 120 ميجابايت محليًا).
+- **إعادة التشغيل:** قد تعيد Render تشغيل الخدمة المجانية في أي وقت. العامل يستأنف المهام المعلقة تلقائيًا، والإرسال المنقطع يصبح «تسليم غير معروف» ولا يُعاد.
+- **سياسة الإبقاء مستيقظًا:** وثائق Render لا تذكر منع طرق الخدمة لإبقائها مستيقظة، لكنها قد تغيّر سياستها.
+- **للترقية لاحقًا:** غيّر Instance Type إلى خطة مدفوعة من صفحة الخدمة نفسها. العامل المدمج يعمل على المدفوعة أيضًا، ويمكنك إيقاف المراقب الخارجي.
+
+### 5.ب الخطة المدفوعة: Blueprint بخدمتين
+
 **جهّز قبل أن تبدأ** سبع قيم في مدير كلمات المرور:
 - `DATABASE_URL`: رابط Session pooler (3.1).
 - `SUPABASE_URL` و`SUPABASE_PUBLISHABLE_KEY` (3.1).

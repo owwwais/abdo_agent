@@ -44,6 +44,19 @@ def _wants_json(request: Request) -> bool:
     ) or "application/json" in request.headers.get("accept", "")
 
 
+async def _supervise(worker: Any) -> None:
+    """يبقي العامل المدمج حيًا: إن سقط (مثل تعذر الاتصال بالقاعدة عند الإقلاع) يُعاد بعد مهلة."""
+    while not worker.stopping.is_set():
+        try:
+            await worker.run_forever()
+        except Exception:
+            log.exception("العامل المدمج توقف بخطأ؛ إعادة التشغيل بعد 30 ثانية")
+            try:
+                await asyncio.wait_for(worker.stopping.wait(), timeout=30)
+            except TimeoutError:
+                continue
+
+
 def create_app(settings: Settings | None = None, engine: AsyncEngine | None = None) -> FastAPI:
     settings = settings or get_settings()
 
@@ -52,9 +65,22 @@ def create_app(settings: Settings | None = None, engine: AsyncEngine | None = No
         own_engine = engine is None
         app.state.engine = engine or create_engine(settings)
         app.state.sessionmaker = make_sessionmaker(app.state.engine)
+        worker, worker_task = None, None
+        if settings.run_worker_in_web:
+            from app.jobs.handlers import HandlerContext
+            from app.jobs.worker import Worker
+
+            worker = Worker(HandlerContext(settings=settings, sessionmaker=app.state.sessionmaker))
+            worker_task = asyncio.create_task(_supervise(worker))
         try:
             yield
         finally:
+            if worker is not None and worker_task is not None:
+                worker.stopping.set()
+                try:
+                    await asyncio.wait_for(worker_task, timeout=25)
+                except TimeoutError:
+                    worker_task.cancel()
             if own_engine:
                 await app.state.engine.dispose()
 

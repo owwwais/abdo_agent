@@ -4,7 +4,8 @@
 > النشر التلقائي معطل، والإرسال الحقيقي يبقى مغلقًا حتى قرارك.
 
 1. **Supabase**: مشروع في منطقة يوافق عليها المؤسسون (قرار مفتوح SPEC §17). فعّل مفاتيح توقيع JWT غير المتماثلة، وعطّل التسجيل العام. أنشئ دور قاعدة مخصصًا يملك مخطط `sales` (docs/decisions/0002). لا تضف `sales` إلى Exposed schemas.
-2. **Render**: أنشئ Blueprint من `render.yaml` (ويب + عامل). الأسرار `sync: false` معرفة على خدمة الويب فقط، لأن Render لا يقبلها داخل مجموعة متغيرات. العامل ينسخها بـ`fromService`/`envVarKey`. `DATABASE_URL` = **session pooler** على المنفذ 5432 (لا transaction pooler: الحفظ الدائم يحتاج جلسة). **احفظ `DATA_HASH_KEY` و`SECRETS_ENCRYPTION_KEY` خارج Render**: تغيير الأول يكسر مطابقة منع التواصل، وفقدان الثاني يعني إعادة إدخال مفاتيح الإعدادات. `OUTBOUND_*` تُضاف لاحقًا إلى المجموعة من اللوحة.
+2. **Render (مجانًا)**: خدمة ويب واحدة من اللوحة، مع `RUN_WORKER_IN_WEB=true` (العامل داخل عملية الويب) و`MIGRATE_ON_START=true` (`scripts/start-web.sh` يطبق الترحيلات قبل uvicorn)، ومراقب خارجي على `/health/live`. التفاصيل: launch-guide.md القسم 5.أ.
+   **Render (مدفوعًا)**: أنشئ Blueprint من `render.yaml` (ويب + عامل). الأسرار `sync: false` معرفة على خدمة الويب فقط، لأن Render لا يقبلها داخل مجموعة متغيرات. العامل ينسخها بـ`fromService`/`envVarKey`. `DATABASE_URL` = **session pooler** على المنفذ 5432 (لا transaction pooler: الحفظ الدائم يحتاج جلسة). **احفظ `DATA_HASH_KEY` و`SECRETS_ENCRYPTION_KEY` خارج Render**: تغيير الأول يكسر مطابقة منع التواصل، وفقدان الثاني يعني إعادة إدخال مفاتيح الإعدادات. `OUTBOUND_*` تُضاف لاحقًا إلى المجموعة من اللوحة.
 3. الترحيلات تعمل عبر `preDeployCommand: alembic upgrade head` في خدمة الويب.
 4. أضف الأعضاء (docs/runbooks/members.md).
 5. تحقق: `/health/ready` يعيد 200، الدخول يعمل، والتطبيق يرفض الإقلاع إن نقص أي متغير مطلوب (الرسالة في سجل Render).
