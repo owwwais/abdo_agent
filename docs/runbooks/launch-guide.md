@@ -189,46 +189,46 @@ uv run python scripts/eval_models.py --yes
 
 ## 5) المرحلة د: الإطلاق على الإنترنت (Render + Supabase)
 
-1. **المستودع:** ارفع المشروع إلى مستودع **خاص** على GitHub من جهازك. ملف `.env` مستثنى تلقائيًا. تأكد قبل الرفع:
-   ```bash
-   git status --ignored
-   ```
-2. **Render:** من [dashboard.render.com](https://dashboard.render.com) اختر **New ← Blueprint**، واختر المستودع. سيقرأ `render.yaml` وينشئ:
+**جهّز قبل أن تبدأ** سبع قيم في مدير كلمات المرور:
+- `DATABASE_URL`: رابط Session pooler (3.1).
+- `SUPABASE_URL` و`SUPABASE_PUBLISHABLE_KEY` (3.1).
+- `SESSION_SECRET` و`DATA_HASH_KEY` و`SECRETS_ENCRYPTION_KEY`: قيم جديدة من `gen_secrets.py --print` (3.2)، لا قيم جهازك.
+- `APP_BASE_URL`: اكتب `https://sales-agent-web.onrender.com`، وتصحح لاحقًا إن أعطتك Render رابطًا مختلفًا (الخطوة 4).
+
+1. **المستودع:** الكود على GitHub. يفضَّل أن يكون خاصًا (GitHub ← Settings ← Change visibility).
+2. **Render:** من [dashboard.render.com](https://dashboard.render.com) اختر **New ← Blueprint**، واربط حساب GitHub، واختر المستودع وفرع `main`. سيقرأ `render.yaml` ويعرض:
    - `sales-agent-web`: الواجهة.
-   - `sales-agent-worker`: العامل، وهو ضروري لأن كل البحث والإرسال والمزامنة تعمل فيه.
-   - `sales-agent-enqueue-due`: مهمة احتياطية كل 15 دقيقة.
-   - مجموعة المتغيرات `sales-agent-shared`.
-3. **املأ مجموعة المتغيرات** (Environment Groups ← sales-agent-shared):
-   - `APP_BASE_URL`: رابط خدمة الويب بـhttps، مثل `https://sales-agent-web.onrender.com` أو نطاقك.
-   - `DATABASE_URL`: رابط Session pooler (3.1).
-   - `SUPABASE_URL`، `SUPABASE_PUBLISHABLE_KEY`.
-   - `SESSION_SECRET`، `DATA_HASH_KEY`، `SECRETS_ENCRYPTION_KEY`: القيم الجديدة من 3.2.
-   - `HOSTINGER_WEBHOOK_SECRET`: بعد إنشاء الويب هوك.
-   - `OUTBOUND_ENABLED=false` الآن، و`OUTBOUND_ALLOWLIST=` فارغ.
-4. **انشر يدويًا** (النشر التلقائي معطل عمدًا): Manual Deploy. الترحيلات تعمل تلقائيًا قبل كل نشر (`alembic upgrade head`).
-   إن نقص متغير، يرفض التطبيق الإقلاع ويكتب السبب بالعربية في سجل Render.
-5. **تحقق:** يجب أن يعيد `https://<رابطك>/health/ready` الحالة 200.
+   - `sales-agent-worker`: العامل. كل البحث والإرسال والمزامنة والجدولة تعمل فيه.
+   - مجموعة المتغيرات `sales-agent-shared`: البيئة والمنطقة الزمنية فقط.
+3. **ستطلب منك اللوحة القيم السبع مرة واحدة** لخدمة الويب. العامل ينسخها منها تلقائيًا. الصق كل قيمة في خانتها ثم **Apply**. يبدأ النشر الأول وتُنشأ الجداول في Supabase تلقائيًا (`alembic upgrade head` قبل الإقلاع).
+   إن نقص متغير أو كان خاطئًا، يرفض التطبيق الإقلاع ويكتب السبب بالعربية في سجل الخدمة (Logs).
+4. **صحّح الرابط إن لزم:** افتح `sales-agent-web` وانظر رابطها أعلى الصفحة. إن اختلف عما كتبته، عدّل `APP_BASE_URL` من **Environment** في خدمة الويب، ثم **Manual Deploy** للخدمتين.
+5. **تحقق:** يجب أن يعيد `https://<رابطك>/health/ready` الحالة 200، وأن يظهر في سجل العامل `worker … started`.
 6. **اربط حسابك بمساحة العمل** من جهازك، موجهًا إلى قاعدة الإنتاج. في PowerShell:
    ```powershell
    $env:DATABASE_URL="<رابط Session pooler>"; $env:APP_ENV="development"; uv run python scripts/add_member.py --workspace-name "اسم شركتك" --auth-user-id <UID من Supabase> --email you@yourdomain.com --name "اسمك" --role owner --phone-region SA
    ```
    كرر لكل مؤسس (`--role reviewer` لمن يراجع فقط). أغلق نافذة PowerShell بعدها حتى لا يبقى الرابط في الجلسة.
-7. **ادخل** من `https://<رابطك>/login` ببريدك وكلمة مرورك في Supabase، وأكمل المرحلة ج.
-8. أنشئ ويب هوك Hostinger (3.5 ب). بعدها يعمل تيليجرام بوضع polling دون أي إعداد إضافي؛ زر «ربط الويب هوك» في تبويبه اختياري.
+7. **ادخل** من `https://<رابطك>/login` ببريدك وكلمة مرورك في Supabase، وأكمل المرحلة ج (صفحة الإعدادات).
+8. **ويب هوك Hostinger** (3.5 ب): الصق السر في الإعدادات ← البريد ← «سر ويب هوك Hostinger». لا حاجة لإعادة النشر. تيليجرام يعمل بوضع polling دون إعداد إضافي.
 
-**الأسعار:** راجع [render.com/pricing](https://render.com/pricing) و[supabase.com/pricing](https://supabase.com/pricing). الخدمات الثلاث في `render.yaml` على خطة Starter. تكلفة النماذج لا تتجاوز الميزانية التي تحددها. تكلفة Brave غالبًا داخل الرصيد المجاني.
+**متغيرات تضيفها لاحقًا بيدك** (Environment Groups ← `sales-agent-shared` ← Add):
+- `OUTBOUND_ALLOWLIST` و`OUTBOUND_ENABLED`: في المرحلة هـ فقط.
+- كل تعديل في المجموعة يحتاج **Manual Deploy** للخدمتين. Render يحفظ ما تضيفه من اللوحة ولا يمسحه عند مزامنة الـBlueprint.
+
+**الأسعار:** الخدمتان على خطة `0.5c-512mb` (Starter سابقًا)؛ راجع [render.com/pricing](https://render.com/pricing) و[supabase.com/pricing](https://supabase.com/pricing). لا تستخدم الخطة المجانية لخدمة الويب: تنام بعد فترة خمول، فتتأخر أو تضيع ويب هوكات Hostinger وتيليجرام. تكلفة النماذج لا تتجاوز الميزانية التي تحددها، والبحث والخرائط غالبًا داخل الحصص المجانية.
 
 ---
 
 ## 6) المرحلة هـ: فتح الإرسال تدريجيًا (بقرارك أنت)
 
-1. **تجربة مغلقة على بريدك:** في Render اضبط `OUTBOUND_ALLOWLIST=you@yourdomain.com` (يقبل أيضًا نطاقًا كاملًا مثل `@yourdomain.com`)، ثم `OUTBOUND_ENABLED=true`، ثم أعد النشر.
+1. **تجربة مغلقة على بريدك:** في Render أضف إلى مجموعة `sales-agent-shared`: `OUTBOUND_ALLOWLIST=you@yourdomain.com` (يقبل أيضًا نطاقًا كاملًا مثل `@yourdomain.com`) و`OUTBOUND_ENABLED=true`، ثم **Manual Deploy** للخدمتين.
    - أضف في المنصة شركة اختبار (الاستيراد ← إدخال يدوي) جهة اتصالها بريدك الثاني، ووثّق سندها «اختبار داخلي».
    - ثم الفرصة ← «معالجة الآن» ← اعتمد من تيليجرام أو اللوحة.
    - تحقق من ثلاثة أمور: الرسالة وصلت إلى صندوقك، وظهرت في مجلد «المرسل» في Hostinger، وأن الرد عليها ظهر في «المحادثات» خلال دقائق.
-2. **الإرسال للعملاء:** أفرغ `OUTBOUND_ALLOWLIST` وأعد النشر. من هذه اللحظة، كل رسالة تعتمدها تُرسل فعلًا.
+2. **الإرسال للعملاء:** احذف `OUTBOUND_ALLOWLIST` من المجموعة وأعد نشر الخدمتين. من هذه اللحظة، كل رسالة تعتمدها تُرسل فعلًا.
 3. **التشغيل المجدول:** الإعدادات ← التشغيل ← وضع التشغيل «فعلي». يُرفض التحويل إن نقص شرط؛ اللوحة تسرد النواقص.
-4. **الطوارئ:** صفحة «اليوم» ← التحكم ← «إيقاف الإرسال» أو «إيقاف كل المعالجة» يعمل فورًا. وللإغلاق التام: `OUTBOUND_ENABLED=false` وإعادة النشر.
+4. **الطوارئ:** صفحة «اليوم» ← التحكم ← «إيقاف الإرسال» أو «إيقاف كل المعالجة» يعمل فورًا. وللإغلاق التام: `OUTBOUND_ENABLED=false` في المجموعة وإعادة نشر الخدمتين.
 
 ---
 

@@ -1,6 +1,15 @@
-# Blueprint مقترح لـRender. النشر التلقائي معطل (autoDeployTrigger: off) حتى تُضبط الأسرار والحسابات
-# ويُمنح تفويض صريح. الأسرار (sync: false) تُدخل مرة واحدة في مجموعة المتغيرات من لوحة Render ولا تُكتب هنا.
-# قاعدة البيانات: Supabase PostgreSQL؛ انظر docs/decisions/0002 وdocs/runbooks/deploy.md.
+# Blueprint لـRender: خدمة ويب وعامل من صورة Docker واحدة. النشر التلقائي معطل (autoDeployTrigger: off).
+#
+# الأسرار: Render لا يقبل «sync: false» داخل مجموعة متغيرات، لذلك تُعرَّف على خدمة الويب فقط
+# (تطلبها لوحة Render مرة واحدة عند إنشاء الـBlueprint)، والعامل ينسخ قيمها بـfromService/envVarKey.
+# المتغيرات التي تُضاف لاحقًا (OUTBOUND_ENABLED، OUTBOUND_ALLOWLIST، HOSTINGER_WEBHOOK_SECRET) تُضاف
+# من اللوحة إلى مجموعة sales-agent-shared؛ Render يحفظ ما يُضاف من اللوحة ولا يمسحه عند مزامنة الـBlueprint.
+# غيابها = القيمة الآمنة: الإرسال الحقيقي مغلق.
+#
+# لا خدمة cron: العامل يجدول المهام بنفسه كل دقيقة ويستعيد المهام المعلقة.
+# الخطة 0.5c-512mb هي «Starter» سابقًا (أعادت Render تسمية الخطط في أغسطس 2026؛ الاسم القديم ما زال مقبولًا).
+# قاعدة البيانات: Supabase (Session pooler)؛ انظر docs/runbooks/launch-guide.md.
+
 envVarGroups:
   - name: sales-agent-shared
     envVars:
@@ -8,11 +17,21 @@ envVarGroups:
         value: production
       - key: APP_TIMEZONE
         value: Asia/Riyadh
+
+services:
+  - type: web
+    name: sales-agent-web
+    runtime: docker
+    region: frankfurt
+    plan: 0.5c-512mb
+    autoDeployTrigger: "off"
+    healthCheckPath: /health/ready
+    preDeployCommand: alembic upgrade head
+    envVars:
+      - fromGroup: sales-agent-shared
       - key: APP_BASE_URL
         sync: false
       - key: DATABASE_URL
-        sync: false
-      - key: CHECKPOINT_DATABASE_URL
         sync: false
       - key: SUPABASE_URL
         sync: false
@@ -24,46 +43,48 @@ envVarGroups:
         sync: false
       - key: SECRETS_ENCRYPTION_KEY
         sync: false
-      - key: HOSTINGER_WEBHOOK_SECRET
-        sync: false
-      - key: DEV_AUTH_ENABLED
-        value: "false"
-      # مفتاح الإيقاف العام: يبقى false حتى تقرر أنت الإرسال الحقيقي. قائمة السماح تحصر المستلمين أثناء التجربة.
-      - key: OUTBOUND_ENABLED
-        value: "false"
-      - key: OUTBOUND_ALLOWLIST
-        sync: false
-      # مفاتيح النماذج والبريد وتيليجرام والبحث تُدخل من صفحة الإعدادات (مشفرة في القاعدة)؛ لا حاجة لها هنا.
-
-services:
-  - type: web
-    name: sales-agent-web
-    runtime: docker
-    region: frankfurt
-    plan: starter
-    autoDeployTrigger: "off"
-    healthCheckPath: /health/ready
-    preDeployCommand: alembic upgrade head
-    envVars:
-      - fromGroup: sales-agent-shared
 
   - type: worker
     name: sales-agent-worker
     runtime: docker
     region: frankfurt
-    plan: starter
+    plan: 0.5c-512mb
     autoDeployTrigger: "off"
     dockerCommand: python -m app.jobs.worker
     envVars:
       - fromGroup: sales-agent-shared
-
-  - type: cron
-    name: sales-agent-enqueue-due
-    runtime: docker
-    region: frankfurt
-    plan: starter
-    autoDeployTrigger: "off"
-    schedule: "*/15 * * * *"
-    dockerCommand: python scripts/enqueue_due.py
-    envVars:
-      - fromGroup: sales-agent-shared
+      - key: APP_BASE_URL
+        fromService:
+          type: web
+          name: sales-agent-web
+          envVarKey: APP_BASE_URL
+      - key: DATABASE_URL
+        fromService:
+          type: web
+          name: sales-agent-web
+          envVarKey: DATABASE_URL
+      - key: SUPABASE_URL
+        fromService:
+          type: web
+          name: sales-agent-web
+          envVarKey: SUPABASE_URL
+      - key: SUPABASE_PUBLISHABLE_KEY
+        fromService:
+          type: web
+          name: sales-agent-web
+          envVarKey: SUPABASE_PUBLISHABLE_KEY
+      - key: SESSION_SECRET
+        fromService:
+          type: web
+          name: sales-agent-web
+          envVarKey: SESSION_SECRET
+      - key: DATA_HASH_KEY
+        fromService:
+          type: web
+          name: sales-agent-web
+          envVarKey: DATA_HASH_KEY
+      - key: SECRETS_ENCRYPTION_KEY
+        fromService:
+          type: web
+          name: sales-agent-web
+          envVarKey: SECRETS_ENCRYPTION_KEY

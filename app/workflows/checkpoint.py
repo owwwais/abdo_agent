@@ -1,7 +1,8 @@
 """حافظ حالة LangGraph الدائم في PostgreSQL (مخطط sales_graph المستقل عن CRM).
 
-اتصال autocommit مخصص بـsearch_path=sales_graph لأن جداول الحافظ غير مؤهلة بمخطط. مع Supabase
-استخدم اتصالًا مباشرًا أو session pooler (لا transaction pooler) بسبب إعدادات الجلسة.
+اتصال autocommit مخصص بـsearch_path=sales_graph لأن جداول الحافظ غير مؤهلة بمخطط. يُضبط بأمر SET بعد
+الاتصال لا بمعامل بدء (options=-c …) لأن بعض الـpoolers (مثل Supavisor) قد ترفض معاملات البدء. مع Supabase
+استخدم اتصالًا مباشرًا أو session pooler (لا transaction pooler): الجلسة المخصصة تحفظ SET طوال الاتصال.
 """
 
 from __future__ import annotations
@@ -29,13 +30,10 @@ def conninfo(settings: Settings) -> str:
 @asynccontextmanager
 async def checkpointer(settings: Settings) -> AsyncIterator[AsyncPostgresSaver]:
     conn = await AsyncConnection.connect(
-        conninfo(settings),
-        autocommit=True,
-        prepare_threshold=0,
-        row_factory=dict_row,
-        options=f"-c search_path={GRAPH_SCHEMA}",
+        conninfo(settings), autocommit=True, prepare_threshold=0, row_factory=dict_row
     )
     try:
+        await conn.execute("SET search_path TO sales_graph")  # = GRAPH_SCHEMA
         yield AsyncPostgresSaver(conn=conn)
     finally:
         await conn.close()

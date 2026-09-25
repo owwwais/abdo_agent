@@ -84,4 +84,4 @@ uv run python scripts/add_member.py ...     # ربط حساب Supabase بعضو�
 
 ## النشر
 
-[دليل التشغيل والإطلاق](docs/runbooks/launch-guide.md) ثم [render.yaml](render.yaml) (النشر التلقائي معطل عمدًا) و[docs/runbooks/deploy.md](docs/runbooks/deploy.md). الإرسال الحقيقي يبقى مغلقًا حتى تفتحه بنفسك بعد تجربة مغلقة على بريدك.
+[دليل التشغيل والإطلاق](docs/runbooks/launch-guide.md) ثم [render.yaml](render.yaml) (ويب + عامل، والنشر التلقائي معطل عمدًا) و[docs/runbooks/deploy.md](docs/runbooks/deploy.md). الإرسال الحقيقي يبقى مغلقًا حتى تفتحه بنفسك بعد تجربة مغلقة على بريدك.

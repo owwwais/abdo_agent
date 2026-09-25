@@ -1863,6 +1863,7 @@ dependencies = [
     { name = "pyjwt", extra = ["crypto"] },
     { name = "python-multipart" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "tzdata" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -1898,6 +1899,7 @@ requires-dist = [
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.14.0" },
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2" },
+    { name = "tzdata", specifier = ">=2026.4" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.53.0" },
 ]
 
