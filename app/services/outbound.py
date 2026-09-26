@@ -257,10 +257,12 @@ async def send_outbound(deps: Deps, lease: Lease) -> dict[str, str]:
             )
             return {"status": "pending", "reason": "daily_limit"}
         in_reply_to, references = None, ""
+        reply_uid: str | None = None
         if draft.reply_to_message_id:
             src = await db.get(Message, draft.reply_to_message_id)
             if src is not None:
                 in_reply_to, references = src.internet_message_id, src.references
+                reply_uid = src.provider_message_id
         mail = OutgoingMail(
             from_address=mctx.config.from_address,
             from_name=mctx.config.from_name,
@@ -270,6 +272,8 @@ async def send_outbound(deps: Deps, lease: Lease) -> dict[str, str]:
             reply_to=mctx.config.reply_to,
             in_reply_to=in_reply_to,
             references=references,
+            reply_uid=reply_uid if reply_uid and reply_uid.isdigit() else None,
+            reply_folder=mctx.config.imap_folder if reply_uid else None,
         )
         cmd.status = "sending"
         cmd.attempts += 1

@@ -40,6 +40,7 @@ SECRETS: dict[str, SecretSpec] = {
     "telegram_bot_token": SecretSpec("رمز بوت تيليجرام", "telegram_bot_token"),
     # يولده التطبيق عند ربط الويب هوك؛ لا يُدخله المستخدم.
     "telegram_webhook_secret": SecretSpec("سر ويب هوك تيليجرام", None),
+    "hostinger_mail_api_key": SecretSpec("رمز Hostinger Mail API", "hostinger_mail_api_key"),
     "hostinger_webhook_secret": SecretSpec(
         "سر ويب هوك Hostinger (Bearer)", "hostinger_webhook_secret"
     ),

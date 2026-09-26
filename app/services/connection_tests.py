@@ -281,10 +281,8 @@ async def live_readiness(
     if not active_sources:
         blockers.append("فعّل مصدرًا واحدًا على الأقل")
     mail = await integ.get_config(db, settings, workspace_id, "mail", integ.MailConfig)
-    if (
-        not mail.configured
-        or not (await get_secret(db, settings, workspace_id, "smtp_password"))[0]
-    ):
+    mail_key = "hostinger_mail_api_key" if mail.provider == "hostinger_api" else "smtp_password"
+    if not mail.configured or not (await get_secret(db, settings, workspace_id, mail_key))[0]:
         warnings.append("البريد غير مهيأ: المسودات تُجهز لكن لا يُرسل بريد (واتساب اليدوي متاح)")
     if not settings.outbound_enabled:
         warnings.append("OUTBOUND_ENABLED=false في ملف البيئة: لن يُرسل أي بريد حتى بعد الاعتماد")

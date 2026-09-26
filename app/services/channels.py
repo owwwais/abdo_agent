@@ -14,6 +14,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.connectors.hostinger_mail import HostingerApiMailbox
 from app.connectors.mail import FakeMailbox, Mailbox, SmtpImapMailbox, SmtpImapSettings
 from app.connectors.places import FakePlacesClient, GooglePlacesClient, PlacesClient
 from app.connectors.search import (
@@ -31,6 +32,7 @@ TEST_HOOKS: dict[str, Any] = {
     "telegram_transport": None,
     "search_transport": None,
     "places_transport": None,
+    "hostinger_transport": None,
 }
 
 
@@ -52,9 +54,11 @@ async def mail_context(
 ) -> MailContext:
     cfg = await integ.get_config(db, settings, workspace_id, "mail", integ.MailConfig)
     if TEST_HOOKS["mailbox"] is not None:
-        return MailContext(cfg, TEST_HOOKS["mailbox"], cfg.provider == "smtp")
+        return MailContext(cfg, TEST_HOOKS["mailbox"], cfg.provider in ("smtp", "hostinger_api"))
     if integ.forced_fake(settings) or cfg.provider == "fake":
         return MailContext(cfg, FakeMailbox(), False)
+    if cfg.provider == "hostinger_api":
+        return await _hostinger_api_context(db, settings, workspace_id, cfg)
     smtp_password, _ = await get_secret(db, settings, workspace_id, "smtp_password")
     if not (cfg.configured and smtp_password):
         raise ChannelNotReady("البريد غير مهيأ: أكمل إعدادات SMTP وكلمة المرور")
@@ -76,6 +80,47 @@ async def mail_context(
             imap_folder=cfg.imap_folder,
             sent_folder=cfg.sent_folder,
         )
+    )
+    return MailContext(cfg, box, True)
+
+
+async def _hostinger_api_context(
+    db: AsyncSession, settings: Settings, workspace_id: uuid.UUID, cfg: integ.MailConfig
+) -> MailContext:
+    """الإرسال عبر Hostinger Mail API؛ القراءة عبر IMAP بكلمة مرور الصندوق إن وُجدت."""
+    token, _ = await get_secret(db, settings, workspace_id, "hostinger_mail_api_key")
+    if not (cfg.configured and token):
+        raise ChannelNotReady(
+            "Hostinger API غير مهيأ: أدخل عنوان الصندوق ورمز Hostinger Mail API في الإعدادات ← البريد"
+        )
+    password, _ = await get_secret(db, settings, workspace_id, "smtp_password")
+    imap_password = password
+    if not cfg.imap_same_password:
+        imap_password, _ = await get_secret(db, settings, workspace_id, "imap_password")
+    imap = None
+    if cfg.imap_enabled and imap_password:
+        imap = SmtpImapMailbox(
+            SmtpImapSettings(
+                smtp_host=cfg.smtp_host,
+                smtp_port=cfg.smtp_port,
+                smtp_security=cfg.smtp_security,
+                smtp_username=cfg.smtp_username,
+                smtp_password=imap_password,
+                imap_enabled=True,
+                imap_host=cfg.imap_host,
+                imap_port=cfg.imap_port,
+                imap_username=cfg.imap_username,
+                imap_password=imap_password,
+                imap_folder=cfg.imap_folder,
+                sent_folder=cfg.sent_folder,
+            )
+        )
+    box = HostingerApiMailbox(
+        token,
+        cfg.smtp_username,
+        imap=imap,
+        sent_folder=cfg.sent_folder,
+        transport=TEST_HOOKS["hostinger_transport"],
     )
     return MailContext(cfg, box, True)
 

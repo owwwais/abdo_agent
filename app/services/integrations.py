@@ -84,7 +84,8 @@ SUGGESTED_PRICES_VERSION = "anthropic-2026-06-24"
 
 
 class MailConfig(_Cfg):
-    provider: Literal["fake", "smtp"] = "fake"
+    # smtp: إرسال SMTP + قراءة IMAP. hostinger_api: إرسال عبر Hostinger Mail API (HTTPS) + قراءة IMAP.
+    provider: Literal["fake", "smtp", "hostinger_api"] = "fake"
     preset: Literal["hostinger", "custom"] = "hostinger"
     smtp_host: str = Field(default="smtp.hostinger.com", max_length=253)
     smtp_port: int = Field(default=465, ge=1, le=65535)
@@ -123,6 +124,8 @@ class MailConfig(_Cfg):
 
     @property
     def configured(self) -> bool:
+        if self.provider == "hostinger_api":
+            return bool(self.smtp_username and self.from_address)
         return self.provider == "smtp" and bool(
             self.smtp_host and self.smtp_username and self.from_address
         )
@@ -220,7 +223,10 @@ def _env_defaults(settings: Settings, type_: str) -> dict[str, Any]:
     """قيم ملف البيئة الاحتياطية للتكاملات عند غياب إعداد محفوظ."""
     if type_ == "mail" and settings.smtp_host:
         out: dict[str, Any] = {
-            "provider": "smtp",
+            # وجود رمز Hostinger API في البيئة يعني الإرسال عبره (منافذ SMTP قد تكون ممنوعة).
+            "provider": "hostinger_api"
+            if settings.hostinger_mail_api_key.get_secret_value()
+            else "smtp",
             "preset": "hostinger" if "hostinger" in settings.smtp_host else "custom",
             "smtp_host": settings.smtp_host,
             "smtp_username": settings.smtp_username,

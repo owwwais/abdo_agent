@@ -37,6 +37,9 @@ class OutgoingMail:
     in_reply_to: str | None = None
     references: str = ""
     message_id: str | None = None
+    # للإرسال عبر واجهات تربط الرد برسالة المصدر نفسها (Hostinger API): UID والمجلد.
+    reply_uid: str | None = None
+    reply_folder: str | None = None
 
 
 @dataclass
@@ -380,20 +383,26 @@ class SmtpImapMailbox:
         except (smtplib.SMTPException, OSError) as exc:
             report.items.append(("SMTP", False, f"تعذر الاتصال: {type(exc).__name__}"))
         if self.s.imap_enabled:
-            try:
-                conn2 = self._imap()
-                folder = self.detect_sent_folder(conn2)
-                conn2.logout()
-                note = f"مجلد المرسل: {folder}" if folder else "لم يُعثر على مجلد المرسل"
-                report.items.append(("IMAP", True, f"تسجيل الدخول نجح؛ {note}"))
-            except imaplib.IMAP4.error:
-                report.items.append(("IMAP", False, "اسم المستخدم أو كلمة المرور غير صحيحة"))
-            except OSError as exc:
-                report.items.append(("IMAP", False, f"تعذر الاتصال: {type(exc).__name__}"))
+            report.items.extend(self._test_imap_sync())
         return report
+
+    def _test_imap_sync(self) -> list[tuple[str, bool, str]]:
+        try:
+            conn = self._imap()
+            folder = self.detect_sent_folder(conn)
+            conn.logout()
+            note = f"مجلد المرسل: {folder}" if folder else "لم يُعثر على مجلد المرسل"
+            return [("IMAP", True, f"تسجيل الدخول نجح؛ {note}")]
+        except imaplib.IMAP4.error:
+            return [("IMAP", False, "اسم المستخدم أو كلمة المرور غير صحيحة")]
+        except OSError as exc:
+            return [("IMAP", False, f"تعذر الاتصال: {type(exc).__name__}")]
 
     async def test(self) -> TestReport:
         return await asyncio.to_thread(self._test_sync)
+
+    async def test_imap(self) -> list[tuple[str, bool, str]]:
+        return await asyncio.to_thread(self._test_imap_sync)
 
 
 class FakeMailbox:

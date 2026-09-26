@@ -31,7 +31,8 @@
 | `DATABASE_URL` | Supabase ← Connect ← **Session pooler** + كلمة مرور القاعدة | `.env` / Render | نعم |
 | `SESSION_SECRET` و`DATA_HASH_KEY` و`SECRETS_ENCRYPTION_KEY` | تُولَّد: `uv run python scripts/gen_secrets.py` | `.env` / Render | نعم |
 | `HOSTINGER_WEBHOOK_SECRET` | hPanel ← Emails ← Agentic mail ← Webhooks (يظهر مرة واحدة) | `.env` / Render (أو خانته في الإعدادات ← البريد) | لاستقبال فوري للردود |
-| كلمة مرور صندوق البريد | hPanel ← Emails ← Mailboxes | **صفحة الإعدادات ← البريد** | للإرسال |
+| كلمة مرور صندوق البريد | hPanel ← Emails ← Mailboxes | **صفحة الإعدادات ← البريد** | لقراءة الردود (IMAP)، وللإرسال بـSMTP |
+| رمز Hostinger Mail API | hPanel ← Emails ← Agentic mail ← API ← Create API token | **صفحة الإعدادات ← البريد** أو `HOSTINGER_MAIL_API_KEY` في Render | للإرسال على خطة Render المجانية (تمنع منافذ SMTP) |
 | مفتاح النموذج (Anthropic أو OpenAI أو Gemini أو مزود متوافق) | لوحة المزود (القسم 3.3) | **صفحة الإعدادات ← النماذج** | للتشغيل الفعلي |
 | مفتاح البحث: Tavily (مجاني بلا بطاقة) أو Brave | app.tavily.com أو api-dashboard.search.brave.com | **صفحة الإعدادات ← البحث** | لمصدر «بحث ويب» |
 | مفتاح Google Maps (Places API) | Google Cloud Console (القسم 3.4 ج) | **صفحة الإعدادات ← البحث** | لمصدر «خرائط Google» |
@@ -142,6 +143,22 @@ uv run python scripts/gen_secrets.py --print
   - الاستقبال: `imap.hostinger.com`، المنفذ 993، SSL.
 - اسم المستخدم هو عنوان البريد كاملًا.
 - تأكد أن سجلات SPF وDKIM وDMARC للنطاق مضبوطة في hPanel؛ بدونها تذهب رسائلك إلى البريد المزعج.
+
+**أ-2) الإرسال عبر Hostinger API (ضروري على خطة Render المجانية)**
+
+خطة Render المجانية [تمنع منافذ SMTP الصادرة](https://render.com/changelog/free-web-services-will-no-longer-allow-outbound-traffic-to-smtp-ports) (25/465/587)، فيظهر في اختبار البريد: `SMTP: ✗ تعذر الاتصال: OSError` بينما IMAP يعمل. الحل: الإرسال عبر واجهة Hostinger (HTTPS)، وتبقى قراءة الردود عبر IMAP.
+1. hPanel ← **Emails** ← نطاقك ← **Agentic mail** ← **API** ← **Create API token**. اختر صندوق المبيعات فقط (Selected mailboxes)، وانسخ الرمز.
+2. ضعه في أحد مكانين:
+   - الإعدادات ← البريد ← «رمز Hostinger Mail API».
+   - أو متغير `HOSTINGER_MAIL_API_KEY` في Render، ثم Manual Deploy.
+3. الإعدادات ← البريد ← المزود: **Hostinger API للإرسال + IMAP للردود** ← حفظ ← «اختبار الاتصال».
+
+   النتيجة المتوقعة:
+   - `Hostinger API: ✓ الرمز يعمل ويدير sales@…`
+   - `IMAP: ✓ تسجيل الدخول نجح`
+
+   كلمة مرور الصندوق تبقى مطلوبة لقراءة الردود.
+4. الرد على عميل يُرسل مرتبطًا برسالته الأصلية، فيظهر في محادثته عنده. نسخة من كل رسالة تُحفظ في «المرسل» تلقائيًا.
 
 **ب) الويب هوك (بعد أن يصبح للمنصة رابط https عام، أي بعد المرحلة د)**
 1. hPanel ← **Emails** ← نطاقك ← **Agentic mail** ← **Webhooks** ← **Add webhook**.
@@ -419,6 +436,7 @@ uv run python scripts/backup.py verify backups/<الملف>.dump
 | «تعذر جلب مفاتيح التحقق من Supabase» عند الدخول | المشروع على HS256 القديم | 3.1 الخطوة 4 |
 | «حسابك غير مرتبط بعضوية» | لم يُشغَّل `add_member.py` | المرحلة د الخطوة 6 |
 | اختبار البريد يفشل في SMTP | كلمة مرور خاطئة أو المنفذ 465 محجوب | جرّب 587 مع STARTTLS من «الإعدادات المتقدمة» |
+| `SMTP: ✗ تعذر الاتصال: OSError` على Render ومع ذلك IMAP ✓ | خطة Render المجانية تمنع منافذ SMTP | اختر مزود «Hostinger API» (القسم 3.5 أ-2) |
 | الردود تتأخر | الويب هوك غير مضبوط | المزامنة الدورية تلتقطها خلال دقائق؛ اضبط الويب هوك (3.5 ب) |
 | ويب هوك Hostinger يعيد 401 | السر لا يطابق | انسخ السر الجديد إلى `HOSTINGER_WEBHOOK_SECRET` أو خانته في الإعدادات |
 | الاكتشاف يعيد جهات «[اصطناعي]» | البحث ما زال على «اصطناعي» | الإعدادات ← البحث ← Tavily أو Brave، أو خرائط Google |

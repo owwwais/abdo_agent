@@ -492,6 +492,27 @@
       ],
       "live_verification": "كتالوج المالك الحقيقي في private/ (غير مرفوع) لم يُحمَّل بعد",
       "blocked_by": null
+    },
+    {
+      "id": "F-024",
+      "milestone": "M6+",
+      "title": "إرسال البريد عبر Hostinger Mail API (HTTPS) حين تُمنع منافذ SMTP",
+      "depends_on": [
+        "F-010"
+      ],
+      "status": "verified",
+      "acceptance": [
+        "مطابقة لمواصفة OpenAPI 1.1.0: Bearer، /me، /send، inReplyTo بـuid+folder",
+        "Message-ID يُقرأ من نسخة المرسل المطابقة للمستلم والموضوع",
+        "ConnectError = فشل آمن للإعادة؛ انقطاع بعد الطلب أو 500/502/504 = تسليم غير معروف؛ 4xx = فشل نهائي",
+        "OUTBOUND_ENABLED ما زال شرطًا؛ مزامنة الردود مجدولة لهذا المزود"
+      ],
+      "evidence": [
+        "tests/unit/test_hostinger_mail.py (8)",
+        "tests/integration/test_hostinger_api_outbound.py (3)"
+      ],
+      "live_verification": "لم يُرسل بريد حقيقي عبر الواجهة بعد (ينتظر رمز المالك على Render)",
+      "blocked_by": null
     }
   ]
 }

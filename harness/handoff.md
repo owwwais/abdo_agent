@@ -8,7 +8,7 @@
 
 ## الأوامر ونتائجها
 
-- `uv run pytest -q` → **201 passed** (وحدة + تكامل على PostgreSQL حقيقي + HTML + E2E بمتصفح).
+- `uv run pytest -q` → **212 passed** (وحدة + تكامل على PostgreSQL حقيقي + HTML + E2E بمتصفح).
 - `uv run ruff check` و`ruff format --check` و`mypy app scripts` → نظيف.
 - `alembic upgrade head` من قاعدة فارغة → 0001، 0002، 0003 بلا انحراف.
 - `scripts/backup.py dump` ثم `verify` → استرجاع ناجح في قاعدة مؤقتة.

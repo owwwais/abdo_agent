@@ -183,13 +183,17 @@
     <fieldset>
       <legend>المزود</legend>
       <label class="check"><input type="radio" name="provider" value="fake" {% if c.provider == "fake" %}checked{% endif %}> <span>اصطناعي (لا إرسال)</span></label>
-      <label class="check"><input type="radio" name="provider" value="smtp" {% if c.provider == "smtp" %}checked{% endif %}> <span>SMTP + IMAP</span></label>
+      <label class="check"><input type="radio" name="provider" value="hostinger_api" {% if c.provider == "hostinger_api" %}checked{% endif %}> <span>Hostinger API للإرسال + IMAP للردود (<strong>المناسب لخطة Render المجانية</strong> التي تمنع منافذ SMTP)</span></label>
+      <label class="check"><input type="radio" name="provider" value="smtp" {% if c.provider == "smtp" %}checked{% endif %}> <span>SMTP + IMAP (يحتاج خادمًا يسمح بمنافذ 465/587)</span></label>
       <label class="check"><input type="radio" name="preset" value="hostinger" {% if c.preset == "hostinger" %}checked{% endif %}> <span>Hostinger — ربط تلقائي: <bdi dir="ltr">smtp.hostinger.com:465 SSL</bdi> و<bdi dir="ltr">imap.hostinger.com:993</bdi></span></label>
       <label class="check"><input type="radio" name="preset" value="custom" {% if c.preset == "custom" %}checked{% endif %}> <span>خادم آخر (أدخل الإعدادات يدويًا)</span></label>
     </fieldset>
     <div class="row">
       <div class="field"><label for="smtp_username">البريد (اسم المستخدم)</label><input id="smtp_username" name="smtp_username" type="email" class="ltr" value="{{ c.smtp_username }}" placeholder="sales@yourdomain.com"></div>
-      {{ secret_field("smtp_password") }}
+      {{ secret_field("smtp_password", "كلمة مرور الصندوق: للإرسال بـSMTP، ولقراءة الردود عبر IMAP في الحالتين") }}
+    </div>
+    <div class="row">
+      {{ secret_field("hostinger_mail_api_key", "لخيار Hostinger API فقط: hPanel ← Emails ← Agentic mail ← API ← Create API token، واختر هذا الصندوق") }}
     </div>
     <div class="row">
       <div class="field"><label for="from_name">اسم المرسل</label><input id="from_name" name="from_name" type="text" value="{{ c.from_name }}"></div>

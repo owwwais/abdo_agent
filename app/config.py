@@ -73,6 +73,8 @@ class Settings(BaseSettings):
 
     # مفتاح التحقق من ويب هوك بريد Hostinger (Agentic Mail → Webhooks). يُرسل كـ Bearer.
     hostinger_webhook_secret: SecretStr = SecretStr("")
+    # رمز Hostinger Mail API (Agentic mail ← API): إرسال عبر HTTPS حين تُمنع منافذ SMTP.
+    hostinger_mail_api_key: SecretStr = SecretStr("")
 
     # قيم احتياطية اختيارية للتكاملات. ما يُحفظ من صفحة الإعدادات يتقدم عليها.
     anthropic_api_key: SecretStr = SecretStr("")

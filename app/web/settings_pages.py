@@ -411,7 +411,16 @@ async def save_mail(
             )
         cfg = integ.MailConfig(**values)
         await _apply_secrets(
-            db, settings, p, form, ["smtp_password", "imap_password", "hostinger_webhook_secret"]
+            db,
+            settings,
+            p,
+            form,
+            [
+                "smtp_password",
+                "imap_password",
+                "hostinger_webhook_secret",
+                "hostinger_mail_api_key",
+            ],
         )
         await integ.save_config(
             db, p.workspace_id, "mail", cfg, version=_int(form, "version", 0), actor_id=p.actor_id

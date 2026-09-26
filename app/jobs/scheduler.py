@@ -121,7 +121,7 @@ async def schedule_due(
                     payload={},
                     **common,
                 )
-            if mail.provider == "smtp" and mail.imap_enabled:
+            if mail.provider in ("smtp", "hostinger_api") and mail.imap_enabled:
                 bucket = int(now.timestamp() // (mail.sync_interval_minutes * 60))
                 job = await queue.enqueue(
                     db,
