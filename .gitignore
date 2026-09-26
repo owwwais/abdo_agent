@@ -17,3 +17,6 @@ sales-research-agent-harness.md
 # نسخ احتياطية (بيانات حقيقية)
 backups/
 evals/results/
+
+# بيانات المالك الخاصة (كتالوج المنتجات وغيره)
+private/

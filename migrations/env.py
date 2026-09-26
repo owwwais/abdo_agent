@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from logging.config import fileConfig
 
 from alembic import context
@@ -25,6 +26,12 @@ def _database_url() -> str:
         url = get_settings().database_url
     if not url:
         raise RuntimeError("DATABASE_URL غير مضبوط")
+    if not config.attributes.get("database_url"):
+        # يطبع الخادم الهدف (دون كلمة المرور) كي لا يُرحَّل الخادم الخطأ دون انتباه؛ .env قد يشير للإنتاج.
+        from urllib.parse import urlsplit
+
+        host = urlsplit(url.replace("+psycopg", "").replace("+asyncpg", "")).hostname
+        print(f"alembic target database host: {host}", file=sys.stderr)
     return normalize_db_url(url)
 
 

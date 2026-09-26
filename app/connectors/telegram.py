@@ -53,7 +53,12 @@ class TelegramClient:
         return result
 
     async def send_message(
-        self, chat_id: str | int, text: str, *, buttons: list[list[dict[str, str]]] | None = None
+        self,
+        chat_id: str | int,
+        text: str,
+        *,
+        buttons: list[list[dict[str, str]]] | None = None,
+        reply_to: int | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "chat_id": chat_id,
@@ -62,8 +67,16 @@ class TelegramClient:
         }
         if buttons:
             payload["reply_markup"] = {"inline_keyboard": buttons}
+        if reply_to:
+            payload["reply_parameters"] = {
+                "message_id": reply_to,
+                "allow_sending_without_reply": True,
+            }
         result: dict[str, Any] = await self.call("sendMessage", payload)
         return result
+
+    async def send_chat_action(self, chat_id: str | int, action: str = "typing") -> None:
+        await self.call("sendChatAction", {"chat_id": chat_id, "action": action})
 
     async def edit_reply_markup(
         self, chat_id: int, message_id: int, buttons: list[list[dict[str, str]]] | None

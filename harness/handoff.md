@@ -1,14 +1,14 @@
 # التسليم — آخر حالة
 
-**التاريخ:** 2026-09-25 · **المرحلة:** M0–M6 + خرائط Google وTavily مبنية ومختبرة محليًا. الكود على GitHub (`owwwais/abdo_agent`، main، **عام**). المتبقي: مفاتيح حقيقية ثم النشر (F-018).
+**التاريخ:** 2026-09-26 · **المرحلة:** M0–M6 + خرائط Google وTavily مبنية ومختبرة محليًا. الكود على GitHub (`owwwais/abdo_agent`، main، **عام**). المتبقي: مفاتيح حقيقية ثم النشر (F-018).
 
 ## آخر ما تحقق
 
-20 خاصية من 21 = `verified` محليًا (أُضيفت F-020 خرائط Google وF-021 Tavily)، وF-018 (النشر والنسخ الاحتياطي) `in_progress`: النسخ الاحتياطي والاسترجاع مختبران والأدلة مكتوبة، لكن لم تُبنَ صورة Docker ولم يُنشر شيء. الأدلة في `harness/features.json` و`docs/verification/m0-m1.md` و`docs/verification/m2-m6.md`.
+22 خاصية من 23 = `verified` محليًا (آخرها F-022 مساعد تيليجرام وF-023 تحميل الكتالوج)، وF-018 (النشر والنسخ الاحتياطي) `in_progress`: النسخ الاحتياطي والاسترجاع مختبران والأدلة مكتوبة، لكن لم تُبنَ صورة Docker ولم يُنشر شيء. الأدلة في `harness/features.json` و`docs/verification/m0-m1.md` و`docs/verification/m2-m6.md`.
 
 ## الأوامر ونتائجها
 
-- `uv run pytest -q` → **193 passed** (وحدة + تكامل على PostgreSQL حقيقي + HTML + E2E بمتصفح).
+- `uv run pytest -q` → **200 passed** (وحدة + تكامل على PostgreSQL حقيقي + HTML + E2E بمتصفح).
 - `uv run ruff check` و`ruff format --check` و`mypy app scripts` → نظيف.
 - `alembic upgrade head` من قاعدة فارغة → 0001، 0002، 0003 بلا انحراف.
 - `scripts/backup.py dump` ثم `verify` → استرجاع ناجح في قاعدة مؤقتة.

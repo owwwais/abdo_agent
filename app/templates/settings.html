@@ -270,6 +270,12 @@
       {{ secret_field("telegram_bot_token") }}
       <div class="field"><label for="chat_id">معرف المجموعة</label><input id="chat_id" name="chat_id" type="text" class="ltr" value="{{ c.chat_id }}"></div>
     </div>
+    <fieldset>
+      <legend>المساعد: أسئلة الأعضاء</legend>
+      <p class="hint">الأعضاء المربوطون فقط. في المحادثة الخاصة مع البوت اكتب السؤال مباشرة، وفي المجموعة استخدم <bdi dir="ltr">/ask</bdi> أو الرد على رسالة البوت. الأوامر <bdi dir="ltr">/today</bdi> و<bdi dir="ltr">/pending</bdi> لا تستهلك النموذج. المساعد يقرأ فقط ولا ينفذ أي إجراء، ولا تُرسل قيم جهات الاتصال للنموذج.</p>
+      <label class="check"><input type="checkbox" name="assistant_enabled" {% if c.assistant_enabled %}checked{% endif %}> <span>تفعيل الأسئلة الحرة (تستهلك النموذج ضمن الميزانية)</span></label>
+      <div class="field"><label for="assistant_daily_limit">حد الأسئلة اليومي لكل عضو</label><input id="assistant_daily_limit" name="assistant_daily_limit" type="number" min="1" max="500" value="{{ c.assistant_daily_limit }}"></div>
+    </fieldset>
     <p class="small">الوضع الحالي: {{ "ويب هوك" if c.mode == "webhook" else "polling (العامل يسحب التحديثات)" }}{% if c.webhook_url %} — <bdi dir="ltr">{{ c.webhook_url }}</bdi>{% endif %}</p>
     <div class="actions"><button class="btn" type="submit">حفظ</button></div>
   </form>

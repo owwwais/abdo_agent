@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-24",
+  "updated": "2026-09-26",
   "status_values": [
     "pending",
     "in_progress",
@@ -449,6 +449,48 @@
         "tests/integration/test_settings_search.py"
       ],
       "live_verification": "لم يُستدعَ Tavily حقيقي (لا مفتاح)",
+      "blocked_by": null
+    },
+    {
+      "id": "F-022",
+      "milestone": "M6+",
+      "title": "مساعد تيليجرام: أوامر سريعة وأسئلة حرة للأعضاء (قراءة فقط)",
+      "depends_on": [
+        "F-009",
+        "F-015"
+      ],
+      "status": "verified",
+      "acceptance": [
+        "الأعضاء المربوطون فقط؛ الغريب يُرفض، والمجموعة غير المصرح بها صمت",
+        "في المجموعة: /ask أو الرد على البوت فقط",
+        "/today و/pending و/help بلا نموذج",
+        "السؤال الحر مهمة في الطابور، ضمن الميزانية بفئة assistant، وبحد يومي لكل عضو",
+        "اللقطة للقراءة فقط ولا تتضمن قيم جهات الاتصال"
+      ],
+      "evidence": [
+        "tests/integration/test_telegram_assistant.py (5 اختبارات)",
+        "migrations/versions/0004_assistant_usage.py"
+      ],
+      "live_verification": "لم يُجرب مع بوت حقيقي ونموذج حقيقي بعد",
+      "blocked_by": null
+    },
+    {
+      "id": "F-023",
+      "milestone": "M6+",
+      "title": "تحميل كتالوج المنتجات والفئات من JSON كمسودات",
+      "depends_on": [
+        "F-003"
+      ],
+      "status": "verified",
+      "acceptance": [
+        "معاينة افتراضيًا ولا كتابة دون --yes",
+        "لا تكرار عند إعادة التشغيل",
+        "المنتجات مسودات"
+      ],
+      "evidence": [
+        "tests/integration/test_load_catalog.py"
+      ],
+      "live_verification": "كتالوج المالك الحقيقي في private/ (غير مرفوع) لم يُحمَّل بعد",
       "blocked_by": null
     }
   ]

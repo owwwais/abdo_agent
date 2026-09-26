@@ -47,7 +47,7 @@ RUN_STATUSES = (
     "canceled",
     "skipped_configuration",
 )
-USAGE_CATEGORIES = ("discovery", "new_opportunity", "followup", "test")
+USAGE_CATEGORIES = ("discovery", "new_opportunity", "followup", "test", "assistant")
 RESERVATION_STATUSES = ("active", "settled", "released")
 
 

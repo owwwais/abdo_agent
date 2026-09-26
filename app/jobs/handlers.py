@@ -209,6 +209,12 @@ async def cleanup(ctx: HandlerContext, lease: Lease) -> dict[str, Any] | None:
     return await _finish(ctx, lease, await run_cleanup(_deps(ctx)))
 
 
+async def telegram_answer(ctx: HandlerContext, lease: Lease) -> dict[str, Any] | None:
+    from app.services.telegram_bot import answer_job
+
+    return await _finish(ctx, lease, await answer_job(_deps(ctx), _ws(lease), lease.payload))
+
+
 async def noop(ctx: HandlerContext, lease: Lease) -> dict[str, Any] | None:
     return await _finish(ctx, lease, {"status": "noop"})
 
@@ -227,6 +233,7 @@ HANDLERS: dict[str, Handler] = {
     "digest": digest,
     "cleanup": cleanup,
     "noop": noop,
+    "telegram_answer": telegram_answer,
 }
 FAILURE_HOOKS: dict[str, FailureHook] = {
     source_service.SOURCE_SAMPLE_JOB: source_sample_failed,

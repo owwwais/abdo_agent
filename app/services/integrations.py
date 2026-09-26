@@ -136,6 +136,9 @@ class TelegramConfig(_Cfg):
     chat_id: str = Field(default="", max_length=40)
     mode: Literal["polling", "webhook"] = "polling"
     webhook_url: str = Field(default="", max_length=500)
+    # مساعد الأسئلة: الأعضاء المربوطون فقط، قراءة فقط، ضمن الميزانية.
+    assistant_enabled: bool = True
+    assistant_daily_limit: int = Field(default=30, ge=1, le=500)
 
     @field_validator("chat_id")
     @classmethod

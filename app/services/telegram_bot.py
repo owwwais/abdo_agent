@@ -12,6 +12,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -175,7 +176,9 @@ async def handle_update(
         if res.scalar_one_or_none() is None:
             return {"status": "duplicate"}
     if "message" in update:
-        return await _handle_message(deps, workspace_id, update["message"], client)
+        return await _handle_message(
+            deps, workspace_id, update["message"], client, allowed_chat, int(update_id)
+        )
     if "callback_query" in update:
         return await _handle_callback(
             deps, workspace_id, update["callback_query"], client, allowed_chat
@@ -183,14 +186,7 @@ async def handle_update(
     return {"status": "ignored"}
 
 
-async def _handle_message(
-    deps: Deps, workspace_id: uuid.UUID, message: dict[str, Any], client: TelegramClient
-) -> dict[str, Any]:
-    text_ = str(message.get("text", "")).strip()
-    sender = message.get("from", {}).get("id")
-    if not text_.startswith("/link") or sender is None:
-        return {"status": "ignored"}
-    code = text_.split(maxsplit=1)[1].strip() if len(text_.split()) > 1 else ""
+async def _link_account(deps: Deps, workspace_id: uuid.UUID, code: str, sender: int) -> str:
     async with deps.sm() as db, db.begin():
         link = (
             await db.execute(
@@ -200,33 +196,180 @@ async def _handle_message(
             )
         ).scalar_one_or_none()
         if link is None or link.used_at is not None or link.expires_at < datetime.now(UTC):
-            reply = "رمز الربط غير صالح أو منتهي."
-        else:
-            existing = (
+            return "رمز الربط غير صالح أو منتهي."
+        existing = (
+            await db.execute(select(UserProfile).where(UserProfile.telegram_user_id == sender))
+        ).scalar_one_or_none()
+        if existing is not None and existing.auth_user_id != link.auth_user_id:
+            existing.telegram_user_id = None
+        profile = await db.get(UserProfile, link.auth_user_id)
+        assert profile is not None
+        profile.telegram_user_id = sender
+        link.used_at = datetime.now(UTC)
+        audit.record(
+            db,
+            workspace_id=workspace_id,
+            actor_id=f"user:{profile.auth_user_id}",
+            action="telegram.link",
+            entity_type="user",
+            change={},
+        )
+        return f"تم ربط حسابك: {profile.display_name}\nأرسل /help لترى ما أستطيع فعله."
+
+
+def _command(text_: str) -> tuple[str, str]:
+    """('/today', 'باقي النص') مع إزالة لاحقة ‎@اسم_البوت‎ التي يضيفها تيليجرام في المجموعات."""
+    if not text_.startswith("/"):
+        return "", text_
+    head, _, rest = text_.partition(" ")
+    return head.split("@", 1)[0].lower(), rest.strip()
+
+
+async def _questions_today(deps: Deps, workspace_id: uuid.UUID, auth_user_id: uuid.UUID) -> int:
+    from sqlalchemy import func
+
+    from app.db.models import Job, Workspace
+
+    async with deps.sm() as db:
+        ws = await db.get(Workspace, workspace_id)
+        tz = ZoneInfo(ws.timezone if ws else deps.settings.app_timezone)
+        start = datetime.now(UTC).astimezone(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+        return int(
+            (
                 await db.execute(
-                    select(UserProfile).where(UserProfile.telegram_user_id == int(sender))
+                    select(func.count())
+                    .select_from(Job)
+                    .where(
+                        Job.workspace_id == workspace_id,
+                        Job.kind == "telegram_answer",
+                        Job.created_at >= start,
+                        Job.payload["auth_user_id"].astext == str(auth_user_id),
+                    )
                 )
-            ).scalar_one_or_none()
-            if existing is not None and existing.auth_user_id != link.auth_user_id:
-                existing.telegram_user_id = None
-            profile = await db.get(UserProfile, link.auth_user_id)
-            assert profile is not None
-            profile.telegram_user_id = int(sender)
-            link.used_at = datetime.now(UTC)
-            audit.record(
-                db,
-                workspace_id=workspace_id,
-                actor_id=f"user:{profile.auth_user_id}",
-                action="telegram.link",
-                entity_type="user",
-                change={},
+            ).scalar_one()
+        )
+
+
+async def _handle_message(
+    deps: Deps,
+    workspace_id: uuid.UUID,
+    message: dict[str, Any],
+    client: TelegramClient,
+    allowed_chat: str,
+    update_id: int,
+) -> dict[str, Any]:
+    text_ = str(message.get("text", "")).strip()
+    sender = message.get("from", {}).get("id")
+    chat = message.get("chat", {})
+    chat_id = chat.get("id")
+    if not text_ or sender is None or chat_id is None:
+        return {"status": "ignored"}
+    private = chat.get("type") == "private" or chat_id == sender
+    if not private and str(chat_id) != allowed_chat:
+        return {"status": "ignored"}  # مجموعة غير مصرح بها: صمت
+    command, rest = _command(text_)
+    reply_to = message.get("message_id")
+
+    async def say(body: str) -> None:
+        try:
+            await client.send_message(chat_id, body, reply_to=reply_to)
+        except TelegramError:
+            pass
+
+    if command == "/link":
+        reply = await _link_account(
+            deps, workspace_id, rest.split()[0] if rest else "", int(sender)
+        )
+        await say(reply)
+        return {"status": "linked" if reply.startswith("تم") else "rejected"}
+
+    async with deps.sm() as db:
+        profile = await _member_for(db, workspace_id, int(sender))
+        tg = await integ.get_config(
+            db, deps.settings, workspace_id, "telegram", integ.TelegramConfig
+        )
+    if profile is None:
+        if private:
+            await say(
+                "حسابك غير مربوط بعضوية فعالة. من اللوحة: الإعدادات ← الأعضاء ← إنشاء رمز ربط، ثم أرسل: /link الرمز"
             )
-            reply = f"تم ربط حسابك: {profile.display_name}"
+        return {"status": "forbidden_user"}
+
+    from app.services import assistant
+
+    if command in ("/start", "/help"):
+        await say(assistant.HELP_TEXT)
+        return {"status": "help"}
+    if command == "/today":
+        async with deps.sm() as db:
+            facts = await assistant.today_facts(db, deps.settings, workspace_id)
+        await say(assistant.today_text(facts))
+        return {"status": "today"}
+    if command == "/pending":
+        async with deps.sm() as db:
+            items = await assistant.pending_drafts(db, workspace_id)
+        await say(assistant.pending_text(items, deps.settings.app_base_url))
+        return {"status": "pending"}
+
+    replied_to_bot = bool(message.get("reply_to_message", {}).get("from", {}).get("is_bot"))
+    if command == "/ask":
+        question = rest
+    elif command:
+        await say("أمر غير معروف. أرسل /help")
+        return {"status": "unknown_command"}
+    elif private or replied_to_bot:
+        question = text_
+    else:
+        return {"status": "ignored"}  # كلام عادي في المجموعة لا يخص البوت
+    if not question:
+        await say("اكتب سؤالك بعد /ask، مثل: /ask ما حالة مجمع عيادات الواحة؟")
+        return {"status": "empty_question"}
+    if not tg.assistant_enabled:
+        await say("الأسئلة الحرة معطلة من الإعدادات. الأوامر /today و/pending متاحة.")
+        return {"status": "assistant_disabled"}
+    if await _questions_today(deps, workspace_id, profile.auth_user_id) >= tg.assistant_daily_limit:
+        await say(
+            f"بلغت حد الأسئلة اليومي ({tg.assistant_daily_limit}). الأوامر /today و/pending متاحة."
+        )
+        return {"status": "limit"}
+    from app.jobs import queue
+
+    async with deps.sm() as db, db.begin():
+        await queue.enqueue(
+            db,
+            kind="telegram_answer",
+            workspace_id=workspace_id,
+            payload={
+                "chat_id": chat_id,
+                "reply_to": reply_to,
+                "question": question[:1000],
+                "auth_user_id": str(profile.auth_user_id),
+            },
+            idempotency_key=f"tgq:{workspace_id}:{update_id}",
+        )
     try:
-        await client.send_message(message.get("chat", {}).get("id"), reply)
+        await client.send_chat_action(chat_id)
     except TelegramError:
         pass
-    return {"status": "linked" if reply.startswith("تم") else "rejected"}
+    return {"status": "queued"}
+
+
+async def answer_job(
+    deps: Deps, workspace_id: uuid.UUID, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """مهمة الطابور: يجيب النموذج ثم يرد في المحادثة نفسها. لا يكرر الرد إن أعيدت المهمة بعد نجاحها."""
+    from app.services.assistant import answer_question
+
+    async with deps.sm() as db:
+        tg = await telegram_context(db, deps.settings, workspace_id)
+    if tg.client is None:
+        return {"status": "skipped", "reason": "تيليجرام غير مهيأ"}
+    answer = await answer_question(deps, workspace_id, str(payload.get("question", "")))
+    try:
+        await tg.client.send_message(payload["chat_id"], answer, reply_to=payload.get("reply_to"))
+    except TelegramError as exc:
+        return {"status": "failed", "reason": str(exc)}
+    return {"status": "answered"}
 
 
 async def _handle_callback(

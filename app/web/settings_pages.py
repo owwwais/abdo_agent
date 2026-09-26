@@ -465,6 +465,8 @@ async def save_telegram(
             chat_id=_s(form, "chat_id"),
             mode=current.mode,
             webhook_url=current.webhook_url,
+            assistant_enabled=_b(form, "assistant_enabled"),
+            assistant_daily_limit=_int(form, "assistant_daily_limit", 30),
         )
         await _apply_secrets(db, settings, p, form, ["telegram_bot_token"])
         await integ.save_config(
