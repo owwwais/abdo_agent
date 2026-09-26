@@ -79,3 +79,46 @@ async def test_preview_rolls_back_and_bad_links_fail(
     with pytest.raises(SystemExit, match="فئة غير معرفة"):
         async with sm() as db, db.begin():
             await load(db, broken, None)
+
+
+async def test_sources_are_created_linked_and_sampled_but_never_activated(
+    sm: async_sessionmaker[AsyncSession], ws: WorkspaceFixture
+) -> None:
+    from app.db.models import Job, Source, SourceSegment
+    from tests.conftest import make_settings
+
+    catalog = {
+        **CATALOG,
+        "sources": [
+            {"name": "خرائط", "kind": "google_maps", "segments": ["مقدمو الخدمات بالمواعيد"]},
+            {"name": "بحث", "kind": "web_search", "segments": ["مقدمو الخدمات بالمواعيد"]},
+        ],
+    }
+    async with sm() as db, db.begin():
+        # مصدر أنشأه المالك يدويًا بلا فئة: يُربط ولا تُغير إعداداته
+        db.add(
+            Source(
+                workspace_id=ws.id,
+                name="خرائط",
+                kind="google_maps",
+                connector_key="google_maps",
+                access_mode="api_key",
+                status="new",
+                config_version=1,
+                created_by="t",
+                updated_by="t",
+            )
+        )
+    async with sm() as db, db.begin():
+        report = await load(db, catalog, None, settings=make_settings(), sample=True)
+    assert any("رُبط بـ1 فئات (كان بلا فئة)" in r and "فحص عينة" in r for r in report)
+    assert any(r.startswith("مصدر جديد: بحث (web_search)") for r in report)
+    async with sm() as db:
+        sources = {s.name: s for s in (await db.execute(select(Source))).scalars()}
+        links = (await db.execute(select(func.count()).select_from(SourceSegment))).scalar_one()
+        jobs = (await db.execute(select(func.count()).select_from(Job))).scalar_one()
+    assert set(sources) == {"خرائط", "بحث"} and links == 2 and jobs == 2
+    assert all(s.status == "validating" for s in sources.values())  # لا تفعيل آلي
+    async with sm() as db, db.begin():
+        again = await load(db, catalog, None, settings=make_settings(), sample=False)
+    assert any("مصدر موجود (لم يُعدَّل): بحث" in r for r in again)
